@@ -353,7 +353,7 @@ async function downloadSong(songOrId, forceQuality = null, suppressAlerts = fals
     }
 
     const isOnlyDownload = window.settings?.enableOnlyDownloadMode === true;
-    const actionLabel = isOnlyDownload ? '下载到服务器' : '缓存到服务器';
+    const actionLabel = isOnlyDownload ? '下载并保存到本地' : '缓存到服务器';
     const canUseServerDownload = typeof window.isUserLoggedIn === 'function' && window.isUserLoggedIn();
 
     if (!canUseServerDownload) {
@@ -370,12 +370,12 @@ async function downloadSong(songOrId, forceQuality = null, suppressAlerts = fals
 
         const options = ['浏览器下载'];
         if (canUseServerDownload) options.push(`${actionLabel}${cacheSuffix}`);
-        const modeText = isOnlyDownload ? '仅下载模式' : '缓存模式';
+        const modeText = isOnlyDownload ? '下载并保存到本地' : '缓存模式';
         selected = await showOptions('下载与缓存', `[${modeText}] 选择对 [${song.name}] 的操作：`, options);
     }
     if (!selected) return false;
 
-    const isServerTarget = selected.startsWith('缓存到服务器') || selected.startsWith('下载到服务器');
+    const isServerTarget = selected.startsWith('缓存到服务器') || selected.startsWith('下载并保存到本地');
     if (isServerTarget && !canUseServerDownload) {
         showError('请先登录同步账户');
         return false;
@@ -460,7 +460,7 @@ async function batchDownloadSongs(songsToDownload, batchOptions = {}) {
     const clearSelection = batchOptions.clearSelection !== false;
     const selectionLabel = batchOptions.selectionLabel || `选择了 ${songsToDownload.length} 首歌曲`;
     const isOnlyDownload = window.settings?.enableOnlyDownloadMode === true;
-    const serverActionLabel = isOnlyDownload ? '下载到服务器' : '缓存到服务器';
+    const serverActionLabel = isOnlyDownload ? '下载并保存到本地' : '缓存到服务器';
     const canUseServerDownload = typeof window.isUserLoggedIn === 'function' && window.isUserLoggedIn();
     if (!canUseServerDownload) {
         showError('\u8bf7\u5148\u767b\u5f55\u540c\u6b65\u8d26\u6237');
@@ -468,7 +468,7 @@ async function batchDownloadSongs(songsToDownload, batchOptions = {}) {
     }
     const targetOptions = ['浏览器下载'];
     if (canUseServerDownload) targetOptions.push(serverActionLabel);
-    const modeText = isOnlyDownload ? '仅下载模式' : '缓存模式';
+    const modeText = isOnlyDownload ? '下载并保存到本地' : '缓存模式';
     const selected = await showOptions('批量下载与缓存', `[${modeText}] ${selectionLabel}，请选择操作：`, targetOptions);
 
     if (!selected) return false;

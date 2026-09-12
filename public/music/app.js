@@ -3624,7 +3624,7 @@ async function findOtherSourceMatches(song, isSilent = false, options = {}) {
         }
 
         // 2. 切换到和当前不同源，并且根据优先级排列 (网易、QQ、酷我、酷狗、咪咕)
-        const baseOrder = ['wy', 'tx', 'kw', 'kg', 'mg'];
+        const baseOrder = ['tx', 'wy', 'kw', 'kg', 'mg'];
         const searchSourcesOrdered = baseOrder.filter(s => s !== song.source);
 
         // 3. 过滤出自定义源支持解析的平台
@@ -3673,7 +3673,11 @@ async function findOtherSourceMatches(song, isSilent = false, options = {}) {
         if (matches.length === 0) {
             console.log(`[AutoSource] 未找到合适的匹配结果 (Total searched: ${flatResults.length})`);
         }
-        return matches.sort((a, b) => (b._matchScore || 0) - (a._matchScore || 0));
+        const platformRank = new Map(baseOrder.map((platform, index) => [platform, index]));
+        return matches.sort((a, b) => {
+            const rankDiff = (platformRank.get(a.source) ?? Number.MAX_SAFE_INTEGER) - (platformRank.get(b.source) ?? Number.MAX_SAFE_INTEGER);
+            return rankDiff || ((b._matchScore || 0) - (a._matchScore || 0));
+        });
     } catch (e) {
         console.warn('[AutoSource] 匹配逻辑执行出错:', e);
         return [];
@@ -10979,6 +10983,15 @@ function cleanSongData(song) {
 
 
 // Modified handler for Grid Buttons
+function shouldAppendPlaylistSongs() {
+    return window.lx_config?.['list.addMusicLocationType'] === 'bottom';
+}
+
+function addSongToPlaylistArray(list, song) {
+    if (shouldAppendPlaylistSongs()) list.push(song);
+    else list.unshift(song);
+}
+
 async function handleTogglePlaylist(listId, btnElement) {
     const activeListData = getActiveListData();
     if (!activeListData) return;
@@ -11007,7 +11020,7 @@ async function handleTogglePlaylist(listId, btnElement) {
         songs.forEach(s => {
             const cleaned = cleanSongData(s);
             if (!targetListArray.some(existing => existing.id === cleaned.id)) {
-                targetListArray.unshift(cleaned);
+                addSongToPlaylistArray(targetListArray, cleaned);
                 addedSongs.push(cleaned);
             }
         });
@@ -11085,7 +11098,7 @@ async function handleTogglePlaylist(listId, btnElement) {
 
     try {
         if (willAdd) {
-            targetListArray.unshift(cleanedSong);
+            addSongToPlaylistArray(targetListArray, cleanedSong);
         } else {
             if (originalIndex >= 0) [removedSong] = targetListArray.splice(originalIndex, 1);
         }
@@ -11763,9 +11776,9 @@ async function handleDownloadClick(event) {
     const cacheSuffix = (checkResult?.exists && !checkResult?.isCollision) ? ' (已缓存)' : '';
 
     const isOnlyDownload = window.settings?.enableOnlyDownloadMode === true;
-    const actionLabel = isOnlyDownload ? '下载到服务器' : '缓存到服务器';
+    const actionLabel = isOnlyDownload ? '下载并保存到本地' : '缓存到服务器';
     const options = ['浏览器下载', `${actionLabel}${cacheSuffix}`];
-    const modeText = isOnlyDownload ? '仅下载模式' : '缓存模式';
+    const modeText = isOnlyDownload ? '下载并保存到本地' : '缓存模式';
     const selected = await showOptions('下载与缓存', `[${modeText}] 选择对 [${song.name}] 的操作：`, options);
 
     if (selected === '浏览器下载') {
@@ -11774,7 +11787,7 @@ async function handleDownloadClick(event) {
         } else {
             showError('下载功能未就绪');
         }
-    } else if (selected && (selected.startsWith('缓存到服务器') || selected.startsWith('下载到服务器'))) {
+    } else if (selected && (selected.startsWith('缓存到服务器') || selected.startsWith('下载并保存到本地'))) {
         const isCached = checkResult?.exists && !checkResult?.isCollision;
         if (!isOnlyDownload && isCached) {
             showInfo('该歌曲已在服务器缓存');
@@ -13311,11 +13324,16 @@ window.CustomSelectManager = {
         
         Array.from(select.options).forEach(opt => {
             const li = document.createElement('li');
-            li.className = 'cs-option' + (opt.selected ? ' selected' : '');
+            li.className = 'cs-option' + (opt.selected ? ' selected' : '') + (opt.disabled ? ' disabled' : '');
             li.innerHTML = `<span>${opt.text}</span><i class="fas fa-check"></i>`;
+            if (opt.disabled) {
+                li.setAttribute('aria-disabled', 'true');
+                li.tabIndex = -1;
+            }
             
             li.onclick = (e) => {
                 e.stopPropagation();
+                if (opt.disabled) return;
                 select.value = opt.value;
                 select.dispatchEvent(new Event('change'));
                 this.syncUI(select, wrapper);

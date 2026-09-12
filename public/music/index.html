@@ -519,11 +519,19 @@
 
                         <!-- Pagination -->
                         <div id="songlist-pagination" class="mt-10 mb-20 flex items-center justify-center gap-6">
+                            <button onclick="goToSongListPage(1)" id="btn-songlist-first"
+                                class="px-3 py-2 t-bg-panel border t-border-main rounded-xl hover:text-emerald-500 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center gap-2 shadow-sm font-medium" title="首页">
+                                <i class="fas fa-angle-double-left text-xs"></i>
+                            </button>
                             <button onclick="changeSongListPage(-1)" id="btn-songlist-prev"
                                 class="px-6 py-2 t-bg-panel border t-border-main rounded-xl hover:text-emerald-500 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center gap-2 shadow-sm font-medium">
                                 <i class="fas fa-chevron-left text-xs"></i> 上一页
                             </button>
                             <span id="songlist-page-info" class="text-sm font-mono font-bold t-text-main">第 1 页</span>
+                            <button onclick="goToSongListLastPage()" id="btn-songlist-last"
+                                class="px-3 py-2 t-bg-panel border t-border-main rounded-xl hover:text-emerald-500 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center gap-2 shadow-sm font-medium" title="末页">
+                                <i class="fas fa-angle-double-right text-xs"></i>
+                            </button>
                             <button onclick="changeSongListPage(1)" id="btn-songlist-next"
                                 class="px-6 py-2 t-bg-panel border t-border-main rounded-xl hover:text-emerald-500 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center gap-2 shadow-sm font-medium">
                                 下一页 <i class="fas fa-chevron-right text-xs"></i>
@@ -906,6 +914,10 @@
                             <!-- 分页 -->
                             <div id="lb-pagination"
                                 class="flex-shrink-0 flex items-center justify-center gap-2 md:gap-4 py-3 border-t t-border-main t-bg-panel/80">
+                                <button id="lb-btn-first" onclick="leaderboardGoToPage(1)" disabled
+                                    class="px-2 md:px-3 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="首页">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </button>
                                 <button id="lb-btn-prev" onclick="leaderboardChangePage(-1)" disabled
                                     class="px-2 md:px-4 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                                     <i class="fas fa-chevron-left md:mr-1"></i><span class="hidden sm:inline">上一页</span>
@@ -916,6 +928,10 @@
                                     class="px-2 md:px-4 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                                     <span class="hidden sm:inline">下一页</span><i
                                         class="fas fa-chevron-right md:ml-1"></i>
+                                </button>
+                                <button id="lb-btn-last" onclick="leaderboardGoToLastPage()" disabled
+                                    class="px-2 md:px-3 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="末页">
+                                    <i class="fas fa-angle-double-right"></i>
                                 </button>
                             </div>
                         </div>
@@ -1315,6 +1331,10 @@
                     </div>
                     <div id="lm-pagination"
                         class="flex-shrink-0 flex items-center justify-center gap-2 md:gap-4 py-2 border-x border-b t-border-main rounded-b-xl t-bg-panel/80 hidden">
+                        <button id="lm-page-first" onclick="window.LocalMusicManager.goToPage(1)"
+                            class="px-2 md:px-3 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="首页">
+                            <i class="fas fa-angle-double-left"></i>
+                        </button>
                         <button id="lm-page-prev" onclick="window.LocalMusicManager.changePage(-1)"
                             class="px-2 md:px-4 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                             <i class="fas fa-chevron-left md:mr-1"></i><span class="hidden sm:inline">上一页</span>
@@ -1323,6 +1343,10 @@
                         <button id="lm-page-next" onclick="window.LocalMusicManager.changePage(1)"
                             class="px-2 md:px-4 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                             <span class="hidden sm:inline">下一页</span><i class="fas fa-chevron-right md:ml-1"></i>
+                        </button>
+                        <button id="lm-page-last" onclick="window.LocalMusicManager.goToPage(window.LocalMusicManager.getTotalPages())"
+                            class="px-2 md:px-3 py-1.5 text-xs md:text-sm t-bg-main border t-border-main rounded-lg hover:t-bg-track disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="末页">
+                            <i class="fas fa-angle-double-right"></i>
                         </button>
                     </div>
                 </div>
@@ -1900,7 +1924,7 @@
                                     <div class="flex items-center justify-between pb-3 border-b t-border-main">
                                         <div>
                                             <div class="text-sm font-bold t-text-main flex items-center">
-                                                仅下载模式
+                                                下载并保存到本地
                                                 <span class="setting-tooltip-trigger ml-1">
                                                     <i class="fas fa-question-circle"></i>
                                                     <span class="setting-tooltip-content">未开启时下载到
@@ -1974,7 +1998,7 @@
                                                 <span class="setting-tooltip-trigger ml-1">
                                                     <i class="fas fa-question-circle"></i>
                                                     <span
-                                                        class="setting-tooltip-content">设置服务端存储文件的命名规则（对标准缓存和仅下载模式均生效）。不影响已有文件。</span>
+                                                        class="setting-tooltip-content">设置服务端存储文件的命名规则（对标准缓存和下载并保存到本地均生效）。不影响已有文件。</span>
                                                 </span>
                                             </div>
                                         </div>
@@ -2022,7 +2046,7 @@
                                             </span>
                                         </div>
                                         <div class="flex flex-col gap-1 text-right">
-                                            <div id="server-music-info" title="仅下载模式目录 (/music)"
+                                            <div id="server-music-info" title="下载并保存到本地目录 (/music)"
                                                 class="text-[10px] md:text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
                                                 正在统计音乐...</div>
                                             <div id="server-cache-info" title="标准缓存目录 (/cache)"
@@ -3077,12 +3101,12 @@
                                 </h3>
                                 <div class="flex gap-2 flex-shrink-0">
                                     <button onclick="window.clearSystemLogs && window.clearSystemLogs()"
-                                        class="px-3 py-1.5 t-bg-track hover:bg-gray-200 t-text-muted rounded-lg text-xs transition-colors whitespace-nowrap"
+                                        class="px-3 py-1.5 t-bg-track hover:t-bg-item-hover t-text-muted rounded-lg text-xs transition-colors whitespace-nowrap border t-border-main"
                                         title="清空日志">
                                         <i class="fas fa-trash-alt mr-1"></i>清空
                                     </button>
                                     <button onclick="window.renderSystemLogs && window.renderSystemLogs()"
-                                        class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs transition-colors whitespace-nowrap"
+                                        class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs transition-colors whitespace-nowrap shadow-sm"
                                         title="刷新">
                                         <i class="fas fa-sync-alt mr-1"></i>刷新
                                     </button>
@@ -3090,10 +3114,10 @@
                             </div>
 
                             <div
-                                class="flex-1 bg-gray-900 rounded-xl border border-gray-800 p-4 font-mono text-xs overflow-hidden flex flex-col shadow-inner">
+                                class="flex-1 t-bg-main rounded-xl border t-border-main p-4 font-mono text-xs overflow-hidden flex flex-col shadow-inner">
                                 <div id="system-log-container"
-                                    class="flex-1 overflow-y-auto custom-scrollbar space-y-1 bg-gray-900 text-gray-300">
-                                    <div class="text-gray-500 italic text-center py-4">暂无日志...</div>
+                                    class="flex-1 overflow-y-auto custom-scrollbar space-y-1 t-bg-main t-text-main">
+                                    <div class="t-text-muted italic text-center py-4 opacity-60">暂无日志...</div>
                                 </div>
                             </div>
                             <div class="text-[10px] t-text-muted text-right">
@@ -3484,10 +3508,10 @@
                 <div class="flex gap-4">
                     <select id="external-list-source" onchange="window.SongListManager.onExternalSourceChange()"
                         class="lm-select !w-32 !py-2">
-                        <option value="wy">网易音乐</option>
                         <option value="tx">腾讯音乐</option>
-                        <option value="kg">酷狗音乐</option>
+                        <option value="wy">网易音乐</option>
                         <option value="kw">酷我音乐</option>
+                        <option value="kg">酷狗音乐</option>
                         <option value="mg">咪咕音乐</option>
                     </select>
                     <input type="text" id="external-list-input" placeholder="输入歌单链接或歌单 ID"

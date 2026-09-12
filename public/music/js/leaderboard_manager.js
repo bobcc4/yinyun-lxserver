@@ -272,8 +272,10 @@ window.LeaderboardManager = (function () {
     }
 
     function renderPagination() {
+        const firstBtn = document.getElementById('lb-btn-first');
         const prevBtn = document.getElementById('lb-btn-prev');
         const nextBtn = document.getElementById('lb-btn-next');
+        const lastBtn = document.getElementById('lb-btn-last');
         const info = document.getElementById('lb-page-info');
 
         const displayList = window.ListSearch && window.ListSearch.state && window.ListSearch.state.active && window.ListSearch.state.id === 'leaderboard'
@@ -284,12 +286,14 @@ window.LeaderboardManager = (function () {
         const totalItems = displayList.length;
         const totalPages = Math.ceil(totalItems / (itemsPerPage || 20)) || 1;
 
+        if (firstBtn) firstBtn.disabled = state.localPage <= 1;
         if (prevBtn) prevBtn.disabled = state.localPage <= 1;
         if (nextBtn) {
             // 当本地页数超出，且已经无法再次从后端拿到新数据时，才禁用“下一页”
             const canLoadMore = state.songs.length >= state.limit * state.page;
             nextBtn.disabled = state.localPage >= totalPages && !canLoadMore;
         }
+        if (lastBtn) lastBtn.disabled = state.localPage >= totalPages && state.songs.length >= state.total;
         if (info) info.innerText = `第 ${state.localPage} 页 / 共 ${totalPages} 页`;
     }
 
@@ -397,6 +401,32 @@ window.LeaderboardManager = (function () {
         }
     }
 
+    async function goToPage(page) {
+        if (state.loading) return;
+        const itemsPerPage = typeof settings !== 'undefined'
+            ? (settings.itemsPerPage === 'all' ? state.songs.length || 1 : parseInt(settings.itemsPerPage))
+            : 20;
+        const targetPage = Math.max(1, Number(page) || 1);
+        const targetItems = targetPage * (itemsPerPage || 20);
+
+        while (state.songs.length < targetItems && state.songs.length < state.total && state.songs.length >= state.limit * state.page) {
+            await loadSongs(state.currentBangid, state.source, state.page + 1);
+        }
+
+        state.localPage = Math.min(targetPage, Math.max(1, Math.ceil(state.songs.length / (itemsPerPage || 20))));
+        renderSongs(state.songs);
+        renderPagination();
+        const container = document.getElementById('lb-songs-container');
+        if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function goToLastPage() {
+        const itemsPerPage = typeof settings !== 'undefined'
+            ? (settings.itemsPerPage === 'all' ? state.songs.length || 1 : parseInt(settings.itemsPerPage))
+            : 20;
+        await goToPage(Math.max(1, Math.ceil((state.total || state.songs.length || 0) / (itemsPerPage || 20))));
+    }
+
     function changeSource() {
         const sel = document.getElementById('lb-source-select');
         if (!sel) return;
@@ -437,6 +467,8 @@ window.LeaderboardManager = (function () {
         playSong,
         playAll,
         changePage,
+        goToPage,
+        goToLastPage,
         handleRowClick,
 
         renderSongs: function () {
@@ -461,6 +493,8 @@ window.LeaderboardManager = (function () {
 // ==================== 全局代理 ====================
 function changeLeaderboardSource() { window.LeaderboardManager.changeSource(); }
 function leaderboardChangePage(delta) { window.LeaderboardManager.changePage(delta); }
+function leaderboardGoToPage(page) { window.LeaderboardManager.goToPage(page); }
+function leaderboardGoToLastPage() { window.LeaderboardManager.goToLastPage(); }
 function playAllLeaderboard() { window.LeaderboardManager.playAll(); }
 
 // ==================== 排行榜批量操作与搜索 ====================

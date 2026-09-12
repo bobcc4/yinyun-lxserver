@@ -26,7 +26,7 @@ window.LocalMusicManager = {
     isManualSearching: false,    // 全局锁，防止滚动触发多次加载
     selectedSubPath: '',         // [New] 当前选中的子目录
     subPathModalMode: 'filter',  // [New] 'filter' | 'categorize'
-    cacheKey: 'lx_lm_filters',   // [New] localStorage key
+    cacheKey: 'lx_lm_filters',   // [New] base localStorage key
     enableReMapping: false,
     listEventsBound: false,
     remasterPollTimer: null,
@@ -707,6 +707,14 @@ window.LocalMusicManager = {
         }, true);
     },
 
+    getFilterStorageKey() {
+        const username = (window.currentListData && window.currentListData.username)
+            || localStorage.getItem('lx_sync_user')
+            || 'anonymous';
+        const server = window.location.origin;
+        return `${this.cacheKey}:${encodeURIComponent(server)}:${encodeURIComponent(String(username).trim().toLowerCase())}`;
+    },
+
     saveFilters() {
         const filters = {
             searchKeyword: this.searchKeyword,
@@ -718,12 +726,12 @@ window.LocalMusicManager = {
             sortOrder: this.sortOrder,
             selectedSubPath: this.selectedSubPath
         };
-        localStorage.setItem(this.cacheKey, JSON.stringify(filters));
+        localStorage.setItem(this.getFilterStorageKey(), JSON.stringify(filters));
     },
 
     loadFilters() {
         try {
-            const cached = localStorage.getItem(this.cacheKey);
+            const cached = localStorage.getItem(this.getFilterStorageKey());
             if (cached) {
                 const filters = JSON.parse(cached);
                 this.searchKeyword = filters.searchKeyword || '';
@@ -742,12 +750,17 @@ window.LocalMusicManager = {
 
                 // Update UI elements
                 if (document.getElementById('lm-search-input')) this.setRichInputValue(document.getElementById('lm-search-input'), this.searchKeyword);
-                if (document.getElementById('lm-sort-by')) document.getElementById('lm-sort-by').value = this.sortBy;
-                if (document.getElementById('lm-sort-order')) document.getElementById('lm-sort-order').value = this.sortOrder;
-                if (document.getElementById('lm-folder-select')) {
-                    document.getElementById('lm-folder-select').value = this.filterFolder;
-                    this._syncSelectActive('lm-folder-select');
-                }
+                ['lm-sort-by', 'lm-sort-order', 'lm-folder-select'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (id === 'lm-sort-by') el.value = this.sortBy;
+                    if (id === 'lm-sort-order') el.value = this.sortOrder;
+                    if (id === 'lm-folder-select') el.value = this.filterFolder;
+                    this._syncSelectActive(id);
+                    if (window.CustomSelectManager && typeof window.CustomSelectManager.syncUI === 'function') {
+                        window.CustomSelectManager.syncUI(el);
+                    }
+                });
                 // 标签按钮 UI 更新
                 this._syncTagUI('lm-quality-tags', this.filterQuality);
                 this._syncTagUI('lm-source-tags', this.filterSource);
@@ -1303,11 +1316,23 @@ window.LocalMusicManager = {
         if (container) container.scrollTop = 0;
     },
 
+    goToPage(page) {
+        const totalPages = this.getTotalPages();
+        const nextPage = Math.min(totalPages, Math.max(1, Number(page) || 1));
+        if (nextPage === this.currentPage) return;
+        this.currentPage = nextPage;
+        this.render();
+        const container = document.getElementById('lm-list-container');
+        if (container) container.scrollTop = 0;
+    },
+
     updatePagination() {
         const pagination = document.getElementById('lm-pagination');
         const info = document.getElementById('lm-page-info');
+        const first = document.getElementById('lm-page-first');
         const prev = document.getElementById('lm-page-prev');
         const next = document.getElementById('lm-page-next');
+        const last = document.getElementById('lm-page-last');
         if (!pagination) return;
 
         const total = this.displayData.length;
@@ -1321,8 +1346,10 @@ window.LocalMusicManager = {
         }
 
         if (info) info.textContent = `第 ${this.currentPage} / ${totalPages} 页 (${total} 首)`;
+        if (first) first.disabled = this.currentPage <= 1;
         if (prev) prev.disabled = this.currentPage <= 1;
         if (next) next.disabled = this.currentPage >= totalPages;
+        if (last) last.disabled = this.currentPage >= totalPages;
     },
 
     render() {

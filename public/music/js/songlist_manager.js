@@ -538,10 +538,17 @@ window.SongListManager = (function () {
     }
 
     function updatePaginationUI() {
-        document.getElementById('songlist-page-info').innerText = `第 ${currentState.page} 页`;
-        document.getElementById('btn-songlist-prev').disabled = currentState.page <= 1;
-        // Simplified check for next page, can be improved with total/limit
-        document.getElementById('btn-songlist-next').disabled = currentState.list.length < currentState.limit;
+        const totalPages = Math.max(1, Math.ceil((currentState.total || 0) / (currentState.limit || 30)));
+        const info = document.getElementById('songlist-page-info');
+        const first = document.getElementById('btn-songlist-first');
+        const prev = document.getElementById('btn-songlist-prev');
+        const next = document.getElementById('btn-songlist-next');
+        const last = document.getElementById('btn-songlist-last');
+        if (info) info.innerText = `第 ${currentState.page} / ${totalPages} 页`;
+        if (first) first.disabled = currentState.page <= 1;
+        if (prev) prev.disabled = currentState.page <= 1;
+        if (next) next.disabled = currentState.page >= totalPages;
+        if (last) last.disabled = currentState.page >= totalPages;
     }
 
     // --- Public Methods ---
@@ -581,6 +588,17 @@ window.SongListManager = (function () {
             if (next < 1) return;
             loadList(next);
             document.getElementById('songlist-grid').scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        goToPage: function (page) {
+            const totalPages = Math.max(1, Math.ceil((currentState.total || 0) / (currentState.limit || 30)));
+            const next = Math.min(totalPages, Math.max(1, Number(page) || 1));
+            if (next === currentState.page) return;
+            loadList(next);
+            document.getElementById('songlist-grid').scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        goToLastPage: function () {
+            const totalPages = Math.max(1, Math.ceil((currentState.total || 0) / (currentState.limit || 30)));
+            this.goToPage(totalPages);
         },
         openDetail: function (id, source) {
             if (window.ListSearch) window.ListSearch.resetState();
@@ -764,6 +782,8 @@ function toggleTagSelector() { window.SongListManager.toggleTagSelector(); }
 function changeSongListSource() { window.SongListManager.changeSource(); }
 function changeSongListSort(sort) { window.SongListManager.changeSort(sort); }
 function changeSongListPage(delta) { window.SongListManager.changePage(delta); }
+function goToSongListPage(page) { window.SongListManager.goToPage(page); }
+function goToSongListLastPage() { window.SongListManager.goToLastPage(); }
 function closeSongListDetail() { window.SongListManager.closeDetail(); }
 function playAllInSongList() { window.SongListManager.playAll(); }
 function handleSongListSearchKeyPress(e) { if (e.key === 'Enter') window.SongListManager.search(); }

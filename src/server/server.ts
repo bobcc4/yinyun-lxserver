@@ -567,7 +567,7 @@ const getAudioRemoteSize = async (audioUrl: string): Promise<number | null> => {
   return null
 }
 
-const AUTO_SOURCE_ORDER = ['wy', 'tx', 'kw', 'kg', 'mg']
+const AUTO_SOURCE_ORDER = ['tx', 'wy', 'kw', 'kg', 'mg']
 const SOURCE_MATCH_CACHE_TTL = 60_000
 const sourceMatchCache = new Map<string, { expiresAt: number, promise: Promise<any[]> }>()
 
@@ -1025,7 +1025,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
         port: global.lx.config.port,
         bindIP: global.lx.config.bindIP,
         'admin.path': global.lx.config['admin.path'] || DEFAULT_ADMIN_PATH,
-        'player.path': '/',
       }
 
       const configJs = `window.CONFIG = ${JSON.stringify(frontendConfig, null, 2)};`
