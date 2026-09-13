@@ -1551,7 +1551,8 @@ const downloadCoverImage = async (imageUrl: string, redirects = 0): Promise<{ da
 }
 
 const setIndexCoverState = (filename: string, username: string, coverType: CacheItem['coverType'], stats?: Stats, location?: string) => {
-    for (const folder of ['cache', 'music'] as const) {
+    const folders: Array<'cache' | 'music'> = isExternalLocation(location) ? ['music'] : ['cache', 'music']
+    for (const folder of folders) {
         const item = indexManager.getAll(username, folder, location).find(candidate => candidate.filename === filename)
         if (!item) continue
         item.coverType = coverType
@@ -1617,7 +1618,8 @@ export const getCacheCover = async (filename: string, username?: string, preferr
                     try { if (tagger) tagger.dispose() } catch (e) { }
                 }
 
-                const item = [...indexManager.getAll(normalizedUsername, 'cache', loc), ...indexManager.getAll(normalizedUsername, 'music', loc)]
+                const folders: Array<'cache' | 'music'> = isExternalLocation(loc) ? ['music'] : ['cache', 'music']
+                const item = folders.flatMap(folder => indexManager.getAll(normalizedUsername, folder, loc))
                     .find(candidate => candidate.filename === filename)
                 if (item && hasUsableRemoteCover(item.img)) {
                     const remoteCover = await downloadCoverImage(item.img!)

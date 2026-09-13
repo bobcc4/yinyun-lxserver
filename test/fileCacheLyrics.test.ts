@@ -5,6 +5,11 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { MusicTagger } from '../src/server/musicTagger'
+import {
+  createExternalMusicLibrary,
+  getExternalLocation,
+  getExternalMusicPath,
+} from '../src/server/externalMusicLibraries'
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yinyun-file-cache-'))
 const previousCwd = process.cwd()
@@ -14,7 +19,7 @@ test.before(async () => {
   process.chdir(root)
   global.lx = {
     dataPath: path.join(root, 'data'),
-    config: {},
+    config: { users: [{ name: 'admin' }] },
   } as any
   fileCache = await import('../src/server/fileCache')
 })
@@ -112,4 +117,18 @@ test('deleting audio also removes its legacy unknown lyric', async () => {
 
   assert.equal(result.deleted, true)
   assert.equal(fs.existsSync(unknownLyric), false)
+})
+
+test('external cover lookup only reads the music index', async () => {
+  const library = createExternalMusicLibrary('admin', 'cover-test')
+  const location = getExternalLocation(library)
+  const externalDir = getExternalMusicPath(library)
+  const filename = 'external-cover-test.mp3'
+  fs.mkdirSync(externalDir, { recursive: true })
+  fs.writeFileSync(path.join(externalDir, filename), Buffer.from('not-a-real-mp3'))
+
+  await fileCache.syncCacheIndex('admin', ['music'], location)
+  const cover = await fileCache.getCacheCover(filename, 'admin', location)
+
+  assert.equal(cover, null)
 })

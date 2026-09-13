@@ -105,6 +105,13 @@
                         </a>
                     </li>
                     <li>
+                        <a href="#" onclick="switchTab('externalmusic')" id="tab-externalmusic"
+                            class="flex items-center px-6 py-3 t-text-muted hover:t-bg-main transition-colors duration-200">
+                            <i class="fas fa-folder-open w-6 text-center"></i>
+                            <span class="ml-3 font-medium">外部音乐</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="#" onclick="switchTab('settings')" id="tab-settings"
                             class="flex items-center px-6 py-3 t-text-muted hover:t-bg-main transition-colors duration-200">
                             <i class="fas fa-cog w-6 text-center"></i>
@@ -974,12 +981,12 @@
                         class="grid grid-cols-[auto_1fr] md:flex md:flex-row md:items-center justify-between gap-1.5 md:gap-3 mb-1.5 md:mb-2 shrink-0 px-1">
                         <div class="contents md:flex md:items-center md:justify-start md:w-auto md:gap-2">
                             <div class="flex items-baseline gap-1 md:gap-1.5 order-1">
-                                <h2 class="text-sm md:text-base font-bold t-text-main whitespace-nowrap">本地音乐</h2>
+                                <h2 id="lm-view-title" class="text-sm md:text-base font-bold t-text-main whitespace-nowrap">本地音乐</h2>
                                 <span id="lm-total-count"
                                     class="text-[9px] md:text-[10px] t-text-muted opacity-60 whitespace-nowrap">共 0
                                     首</span>
                             </div>
-                            <div
+                            <div id="lm-storage-controls"
                                 class="flex items-center gap-0.5 md:gap-1 bg-gray-100/50 dark:bg-gray-700/30 p-0.5 rounded-lg border t-border-main scale-90 md:scale-100 origin-left order-3 md:order-2">
                                 <select id="lm-location-select" onchange="window.LocalMusicManager.changeLocation()"
                                     class="lm-select !w-16 md:!w-20 !py-0.5 !text-[9px] md:!text-[10px] !px-1">
@@ -1009,14 +1016,14 @@
                                 <button onclick="window.LocalMusicManager.refresh()"
                                     class="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded"><i
                                         class="fas fa-sync-alt text-[10px]"></i></button>
-                                <button onclick="window.LocalMusicManager.autoLinkAll()"
+                                <button data-lm-local-only="true" onclick="window.LocalMusicManager.autoLinkAll()"
                                     class="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded"
                                     title="智能检测"><i class="fas fa-magic text-[10px]"></i></button>
-                                <button id="lm-remap-toggle-btn-mobile"
+                                <button data-lm-local-only="true" id="lm-remap-toggle-btn-mobile"
                                     onclick="window.LocalMusicManager.toggleReMapping()"
                                     class="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded hover:bg-emerald-500 hover:text-white transition-all"
                                     title="歌曲重映射"><i class="fas fa-link text-[10px]"></i></button>
-                                <button id="lm-remaster-btn-mobile" onclick="window.LocalMusicManager.openRemasterModal()"
+                                <button data-lm-local-only="true" id="lm-remaster-btn-mobile" onclick="window.LocalMusicManager.openRemasterModal()"
                                     class="hidden w-6 h-6 items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded hover:bg-red-500 hover:text-white transition-all"
                                     title="歌曲洗版"><i class="fas fa-exchange-alt text-[10px]"></i></button>
                                 <button onclick="window.LocalMusicManager.toggleBatchMode()"
@@ -1048,13 +1055,13 @@
                                 <button onclick="window.LocalMusicManager.refresh()"
                                     class="w-7 h-7 md:w-8 md:h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded-lg hover:bg-[var(--c-500)] hover:text-white transition-all"
                                     title="刷新"><i class="fas fa-sync-alt text-xs"></i></button>
-                                <button onclick="window.LocalMusicManager.autoLinkAll()"
+                                <button data-lm-local-only="true" onclick="window.LocalMusicManager.autoLinkAll()"
                                     class="w-7 h-7 md:w-8 md:h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded-lg hover:bg-purple-500 hover:text-white transition-all"
                                     title="智能检测"><i class="fas fa-magic text-xs"></i></button>
-                                <button id="lm-remap-toggle-btn" onclick="window.LocalMusicManager.toggleReMapping()"
+                                <button data-lm-local-only="true" id="lm-remap-toggle-btn" onclick="window.LocalMusicManager.toggleReMapping()"
                                     class="w-7 h-7 md:w-8 md:h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"
                                     title="歌曲重映射"><i class="fas fa-link text-xs"></i></button>
-                                <button id="lm-remaster-btn" onclick="window.LocalMusicManager.openRemasterModal()"
+                                <button data-lm-local-only="true" id="lm-remaster-btn" onclick="window.LocalMusicManager.openRemasterModal()"
                                     class="hidden w-7 h-7 md:w-8 md:h-8 items-center justify-center bg-gray-100 dark:bg-gray-700/50 rounded-lg hover:bg-red-500 hover:text-white transition-all"
                                     title="歌曲洗版"><i class="fas fa-exchange-alt text-xs"></i></button>
                                 <button onclick="window.LocalMusicManager.toggleBatchMode()"
@@ -1161,7 +1168,7 @@
 
                                 <!-- 选项组合 (存储/排序) -->
                                 <div class="grid grid-cols-3 gap-1 md:col-span-2">
-                                    <div class="flex items-center gap-1">
+                                    <div id="lm-folder-filter-control" class="flex items-center gap-1">
                                         <label
                                             class="hidden md:inline-block text-[9px] md:text-[10px] font-bold text-gray-500 uppercase">位置</label>
                                         <select id="lm-folder-select" onchange="window.LocalMusicManager.changeFolder()"
@@ -1263,29 +1270,29 @@
                                         title="将选中的本地歌曲加入歌单">
                                         <i class="fas fa-folder-plus"></i>加入歌单
                                     </button>
-                                    <button onclick="window.LocalMusicManager.batchFetchLyrics()"
+                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchFetchLyrics()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-closed-captioning"></i>补全歌词
                                     </button>
-                                    <button onclick="window.LocalMusicManager.batchEmbedLyric()"
+                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchEmbedLyric()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-violet-500 hover:bg-violet-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5"
                                         title="将歌词嵌入音频文件 USLT 标签（有 .lrc 文件直接使用，否则从网络获取）">
                                         <i class="fas fa-file-audio"></i>嵌入歌词
                                     </button>
-                                    <button id="lm-batch-categorize-btn"
+                                    <button data-lm-local-only="true" id="lm-batch-categorize-btn"
                                         onclick="window.LocalMusicManager.openCategorizeModal()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5 hidden">
                                         <i class="fas fa-folder-open"></i>分类
                                     </button>
-                                    <button onclick="window.LocalMusicManager.batchUpdateMetadata()"
+                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchUpdateMetadata()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-tags"></i>补全元信息
                                     </button>
-                                    <button onclick="window.LocalMusicManager.batchSwitchFolder()"
+                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchSwitchFolder()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-exchange-alt"></i>移动目录
                                     </button>
-                                    <button onclick="window.LocalMusicManager.batchSwitchBaseLocation()"
+                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchSwitchBaseLocation()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-cloud-upload-alt"></i>云端同步
                                     </button>
@@ -1293,7 +1300,7 @@
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-download"></i>保存
                                     </button>
-                                    <button onclick="window.LocalMusicManager.batchDelete()"
+                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchDelete()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-trash-alt"></i>删除
                                     </button>
@@ -1476,6 +1483,7 @@
                                             <option value="leaderboard">排行榜</option>
                                             <option value="favorites">我的收藏</option>
                                             <option value="localmusic">本地音乐</option>
+                                            <option value="externalmusic">外部音乐</option>
                                             <option value="about" selected>关于 (默认)</option>
                                         </select>
                                     </div>

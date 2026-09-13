@@ -4,6 +4,8 @@
  */
 
 window.LocalMusicManager = {
+    viewMode: 'local',
+    externalOnly: false,
     originalData: [],
     displayData: [],
     currentPage: 1,
@@ -712,7 +714,30 @@ window.LocalMusicManager = {
             || localStorage.getItem('lx_sync_user')
             || 'anonymous';
         const server = window.location.origin;
-        return `${this.cacheKey}:${encodeURIComponent(server)}:${encodeURIComponent(String(username).trim().toLowerCase())}`;
+        return `${this.cacheKey}:${this.viewMode}:${encodeURIComponent(server)}:${encodeURIComponent(String(username).trim().toLowerCase())}`;
+    },
+
+    setViewMode(mode) {
+        this.viewMode = mode === 'external' ? 'external' : 'local';
+        this.externalOnly = this.viewMode === 'external';
+
+        const title = document.getElementById('lm-view-title');
+        if (title) title.textContent = this.externalOnly ? '外部音乐' : '本地音乐';
+        const storageControls = document.getElementById('lm-storage-controls');
+        if (storageControls) storageControls.style.display = this.externalOnly ? 'none' : '';
+        const folderFilter = document.getElementById('lm-folder-filter-control');
+        if (folderFilter) folderFilter.style.display = this.externalOnly ? 'none' : '';
+        document.querySelectorAll('[data-lm-local-only="true"]').forEach(element => {
+            element.style.display = this.externalOnly ? 'none' : '';
+        });
+
+        if (this.externalOnly) {
+            this.filterFolder = 'music';
+            this.selectedSubPath = '';
+            this.enableReMapping = false;
+            if (this.batchMode) this.toggleBatchMode();
+        }
+        this.updateBatchUI();
     },
 
     saveFilters() {
@@ -833,6 +858,7 @@ window.LocalMusicManager = {
     init() {
         // Initialization can run when the tab is clicked, or immediately.
         // Try reading global cache location to sync the selector.
+        this.setViewMode('local');
         this.syncLocationSelector();
         this.resetFilters(false);
         this.bindListEvents();
@@ -844,7 +870,8 @@ window.LocalMusicManager = {
         const origSwitchTab = window.switchTab;
         window.switchTab = function (tabId) {
             origSwitchTab(tabId);
-            if (tabId === 'localmusic') {
+            if (tabId === 'localmusic' || tabId === 'externalmusic') {
+                window.LocalMusicManager.setViewMode(tabId === 'externalmusic' ? 'external' : 'local');
                 window.LocalMusicManager.syncLocationSelector();
                 window.LocalMusicManager.resetFilters();
                 window.LocalMusicManager.fetchData(true); // silent fetch
@@ -982,7 +1009,7 @@ window.LocalMusicManager = {
     resetFilters(apply = true) {
         this.searchKeyword = '';
         this.quickSearchKeyword = '';
-        this.filterFolder = 'all';
+        this.filterFolder = this.externalOnly ? 'music' : 'all';
         this.filterQuality = new Set();
         this.filterStatus = new Set();
         this.filterSource = new Set();
@@ -1005,7 +1032,7 @@ window.LocalMusicManager = {
         if (sortOrder) sortOrder.value = 'desc';
 
         if (document.getElementById('lm-folder-select')) {
-            document.getElementById('lm-folder-select').value = 'all';
+            document.getElementById('lm-folder-select').value = this.filterFolder;
             this._syncSelectActive('lm-folder-select');
         }
 
@@ -1018,7 +1045,7 @@ window.LocalMusicManager = {
         const subPathText = document.getElementById('lm-subpath-text');
         if (subPathText) subPathText.innerText = '\u5168\u90e8';
 
-        localStorage.removeItem(this.cacheKey);
+        localStorage.removeItem(this.getFilterStorageKey());
         const activeDot = document.getElementById('lm-filter-active-dot');
         if (activeDot) activeDot.classList.add('hidden');
         if (apply) this.applyFilters();
@@ -1061,7 +1088,7 @@ window.LocalMusicManager = {
                 container.innerHTML = `
                     <div class="text-center py-20 text-gray-500 animate-fade-in">
                         <i class="fas fa-circle-notch fa-spin text-4xl mb-4 text-emerald-500"></i>
-                        <p class="font-bold tracking-wider">正在加载本地音乐...</p>
+                        <p class="font-bold tracking-wider">正在加载${this.externalOnly ? '外部' : '本地'}音乐...</p>
                     </div>`;
             }
         }
@@ -1087,7 +1114,10 @@ window.LocalMusicManager = {
             if (result.success) {
                 this.authExpired = false;
                 this.authExpiredNotified = false;
-                this.originalData = result.data || [];
+                const allData = result.data || [];
+                this.originalData = this.externalOnly
+                    ? allData.filter(item => String(item.storageLocation || '').startsWith('external:'))
+                    : allData.filter(item => !String(item.storageLocation || '').startsWith('external:'));
                 // Sort by mtime initially descending
                 this.originalData.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
                 this.applyFilters();
@@ -1160,7 +1190,10 @@ window.LocalMusicManager = {
         // 3. Apply Filters（多选 Set，空集合表示不限制；Folder 为单选）
         current = current.filter(item => {
             // Folder check（单选）
-            if (this.filterFolder !== 'all' && item.folder !== this.filterFolder) return false;
+            if (this.externalOnly) {
+                if (!String(item.storageLocation || '').startsWith('external:')) return false;
+                if (item.folder !== 'music') return false;
+            } else if (this.filterFolder !== 'all' && item.folder !== this.filterFolder) return false;
 
             // Quality check（多选）
             if (this.filterQuality.size > 0 && !this.filterQuality.has(item.quality)) return false;
@@ -1382,7 +1415,7 @@ window.LocalMusicManager = {
             container.innerHTML = `
                 <div class="text-center py-20 text-gray-500">
                     <i class="fas fa-inbox text-4xl mb-4 opacity-50"></i>
-                    <p>没有找到相关本地音乐</p>
+                    <p>没有找到相关${this.externalOnly ? '外部' : '本地'}音乐</p>
                 </div>`;
             return;
         }
@@ -1454,7 +1487,9 @@ window.LocalMusicManager = {
                 return d.toLocaleDateString() + ' ' + d.toLocaleTimeString().slice(0, 5);
             };
 
-            const folderIcon = item.folder === 'music' ? '<i class="fas fa-download text-blue-500 mr-1" title="下载目录"></i>' : '<i class="fas fa-hdd text-emerald-500 mr-1" title="缓存目录"></i>';
+            const folderIcon = this.externalOnly
+                ? '<i class="fas fa-folder-open text-sky-500 mr-1" title="外部音乐库"></i>'
+                : (item.folder === 'music' ? '<i class="fas fa-download text-blue-500 mr-1" title="下载目录"></i>' : '<i class="fas fa-hdd text-emerald-500 mr-1" title="缓存目录"></i>');
 
             html += `
             <div class="grid grid-cols-12 gap-2 md:gap-4 p-3 md:p-2 items-center rounded-xl hover:t-bg-item-hover transition-all t-border-main border-b last:border-b-0 group relative ${isSelected ? 't-bg-item-hover ring-1 ring-emerald-500/30' : ''}" data-lm-row-index="${index}">
@@ -1501,7 +1536,7 @@ window.LocalMusicManager = {
                                 ${(!missingID3 && !missingCover && !missingLyric) ? '<span class="px-1 py-0 bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30 rounded-sm font-medium">完整</span>' : ''}
                             </div>
 
-                            ${(isUnindexed || this.enableReMapping) ? `
+                            ${(!this.externalOnly && (isUnindexed || this.enableReMapping)) ? `
                                 <button data-lm-action="manual" data-lm-index="${index}"
                                         class="px-1.5 py-0.5 bg-emerald-500 text-white rounded-md font-bold shadow-sm shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-1">
                                     <i class="fas fa-link text-[8px]"></i>关联
@@ -1548,7 +1583,7 @@ window.LocalMusicManager = {
                     <div class="hidden lg:block text-xs text-right pr-2 font-mono t-text-muted shrink-0 mr-1">
                         ${formatSize(item.size)}
                     </div>
-                    ${(isUnindexed || this.enableReMapping) ? `
+                    ${(!this.externalOnly && (isUnindexed || this.enableReMapping)) ? `
                         <button data-lm-action="manual" data-lm-index="${index}"
                                 class="hidden sm:flex w-8 h-8 md:w-7 md:h-7 items-center justify-center rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-sm shrink-0" title="手动关联">
                             <i class="fas fa-link text-[10px]"></i>
@@ -1564,10 +1599,10 @@ window.LocalMusicManager = {
                         <i class="fas fa-download text-[10px]"></i>
                     </button>
                     <!-- Deletion from single operations -->
-                    <button data-lm-action="delete" data-lm-index="${index}"
+                    ${!this.externalOnly ? `<button data-lm-action="delete" data-lm-index="${index}"
                             class="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center rounded-full t-bg-main border t-border-main t-text-muted hover:text-red-500 hover:border-red-300 transition-all shadow-sm shrink-0" title="删除">
                         <i class="far fa-trash-alt text-[10px]"></i>
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
             `;
@@ -1663,6 +1698,7 @@ window.LocalMusicManager = {
     },
 
     toggleReMapping() {
+        if (this.externalOnly) return;
         this.enableReMapping = !this.enableReMapping;
 
         // Update button UI style
@@ -1849,6 +1885,10 @@ window.LocalMusicManager = {
     },
 
     async deleteSingle(index) {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能删除文件');
+            return;
+        }
         const item = this.displayData[index];
         if (!item) {
             if (typeof showError === 'function') showError('文件信息已失效，请刷新后重试');
@@ -1865,6 +1905,10 @@ window.LocalMusicManager = {
     },
 
     async batchDelete() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能删除文件');
+            return;
+        }
         if (this.selectedItems.size === 0) {
             if (typeof showError === 'function') showError('请先选择要删除的文件');
             return;
@@ -1908,6 +1952,10 @@ window.LocalMusicManager = {
     },
 
     async batchFetchLyrics() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能写入歌词');
+            return;
+        }
         // Find items that don't have lyrics
         const targets = this.getSelectedEntries().filter(item => !item.hasLyric);
 
@@ -1953,6 +2001,10 @@ window.LocalMusicManager = {
     },
 
     async batchEmbedLyric() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能写入歌词');
+            return;
+        }
         const targetFilenames = this.getSelectedFilenames();
         if (targetFilenames.length === 0) {
             if (typeof showError === 'function') showError('请先选择要嵌入歌词的文件');
@@ -2010,6 +2062,10 @@ window.LocalMusicManager = {
     },
 
     async batchUpdateMetadata() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能修改元信息');
+            return;
+        }
         const targets = this.getSelectedEntries();
         const targetFilenames = targets.map(item => item.filename);
 
@@ -2048,6 +2104,10 @@ window.LocalMusicManager = {
     },
 
     async batchSwitchFolder() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能移动文件');
+            return;
+        }
         const selectedEntries = this.getSelectedEntries();
         if (selectedEntries.length === 0) {
             if (typeof showError === 'function') showError('请先选择要移动的文件');
@@ -2110,6 +2170,10 @@ window.LocalMusicManager = {
     },
 
     async batchSwitchBaseLocation() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能转移文件');
+            return;
+        }
         const targetFilenames = this.getSelectedFilenames();
         if (targetFilenames.length === 0) {
             if (typeof showError === 'function') showError('请先选择要转移的文件');
@@ -2535,6 +2599,10 @@ window.LocalMusicManager = {
     },
 
     async autoLinkAll() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能修改索引');
+            return;
+        }
         const unindexed = this.originalData.filter(item =>
             item.source === 'unknown' || (item.songmid && item.songmid.includes(' - ')) || !item.name || item.name === '未知歌曲'
         );
@@ -2798,6 +2866,10 @@ window.LocalMusicManager = {
     },
 
     async batchCategorize(targetSubPath) {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能分类文件');
+            return;
+        }
         const filenames = this.getSelectedFilenames();
         if (filenames.length === 0) return;
 
@@ -3051,6 +3123,10 @@ window.LocalMusicManager = {
     },
 
     async openRemasterModal() {
+        if (this.externalOnly) {
+            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能洗版');
+            return;
+        }
         if (!window.settings?.enableRemaster) {
             if (typeof showError === 'function') showError('请先在设置中启用歌曲洗版');
             return;

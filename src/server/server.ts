@@ -3111,16 +3111,24 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
           res.end('Invalid storage location')
           return
         }
-        const cover = await fileCache.getCacheCover(filename, username, location) as any
-        if (cover && cover.data) {
-          res.writeHead(200, {
-            'Content-Type': cover.mime || 'image/jpeg',
-            'Cache-Control': 'public, max-age=86400'
-          })
-          res.end(cover.data)
-        } else {
-          res.writeHead(404)
-          res.end('Not Found')
+        try {
+          const cover = await fileCache.getCacheCover(filename, username, location) as any
+          if (cover && cover.data) {
+            res.writeHead(200, {
+              'Content-Type': cover.mime || 'image/jpeg',
+              'Cache-Control': 'public, max-age=86400'
+            })
+            res.end(cover.data)
+          } else {
+            res.writeHead(404)
+            res.end('Not Found')
+          }
+        } catch (error: any) {
+          console.warn(`[Cache] Cover request failed for ${filename}:`, error?.message || error)
+          if (!res.headersSent) {
+            res.writeHead(404)
+            res.end('Not Found')
+          }
         }
         return
       }

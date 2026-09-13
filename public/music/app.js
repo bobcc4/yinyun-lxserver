@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Settings & Batch Selection
-const DEFAULT_ENTRY_TABS = new Set(['search', 'songlist', 'leaderboard', 'favorites', 'localmusic', 'about']);
+const DEFAULT_ENTRY_TABS = new Set(['search', 'songlist', 'leaderboard', 'favorites', 'localmusic', 'externalmusic', 'about']);
 const DEFAULT_SETTINGS = {
     itemsPerPage: 20, // Default 20 items per page, can be 'all'
     defaultEntry: 'about', // 默认入口
@@ -979,7 +979,8 @@ function switchTab(tabId) {
         el.classList.add('opacity-0');
     });
 
-    const activeView = document.getElementById(`view-${tabId}`);
+    const viewTabId = tabId === 'externalmusic' ? 'localmusic' : tabId;
+    const activeView = document.getElementById(`view-${viewTabId}`);
     if (!activeView) return;
 
     activeView.classList.remove('hidden');
@@ -1057,8 +1058,12 @@ function switchTab(tabId) {
         }
     }
 
-    if (tabId === 'localmusic') {
+    if (tabId === 'localmusic' || tabId === 'externalmusic') {
         document.getElementById('page-title').innerText = "本地音乐";
+    }
+
+    if (tabId === 'externalmusic') {
+        document.getElementById('page-title').innerText = "外部音乐";
     }
 
     // Collapse Favorites if leaving
