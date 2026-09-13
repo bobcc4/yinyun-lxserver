@@ -5,5 +5,12 @@ node_modules
 data
 logs
 lx-music-desktop-master
+*.tmp
+.tmp-*
 dist-electron
+test-results
+server
+cache
+cover_cache
+music
 build
