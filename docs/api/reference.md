@@ -74,7 +74,20 @@
 - `POST /api/v1/player/user/list`: 全量覆盖更新用户歌单数据（会触发同步广播）。
 - `POST /api/v1/player/music/user/list/remove`: 批量删除指定歌单中的歌曲 (`{"listId": "...", "songIds": [...]}`)。
 
-### 3.2 历史快照 (Snapshot)
+### 3.2 音云服务端之间歌单分享
+
+以下接口使用 `Authorization: Bearer <accessToken>`，Web 播放器也兼容当前账户的 `x-user-token` 会话令牌。
+
+- `POST /api/v1/playlist-shares`: 根据 `{"playlistId": "..."}` 创建带有效期的只读分享链接。
+- `GET /api/v1/playlist-shares/<token>`: 公开读取分享 JSON 包，不需要登录。
+- `DELETE /api/v1/playlist-shares/<token>`: 撤销当前用户创建的分享链接。
+- `GET /api/v1/playlists/<id>/export`: 导出歌单 JSON，不创建长期分享链接。
+- `POST /api/v1/playlist-import/preview`: 根据 `{"url": "..."}` 或 `{"package": {...}}` 生成导入预览。
+- `POST /api/v1/playlist-import`: 根据同样的请求体确认导入，并在当前账户创建普通歌单。
+
+导入预览会区分本地命中、在线可用和未匹配。导入不会复制音频文件，播放时会优先使用接收方的本地文件；没有本地文件的歌曲保留在线识别信息。分享包不包含密码、Token、代理、本地路径或临时播放地址。
+
+### 3.3 历史快照 (Snapshot)
 
 - `GET /api/v1/admin/data/snapshots`: 获取快照列表。
 - `GET /api/v1/admin/data/snapshot`: 获取特定快照的数据。

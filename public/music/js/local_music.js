@@ -730,12 +730,10 @@ window.LocalMusicManager = {
         document.querySelectorAll('[data-lm-local-only="true"]').forEach(element => {
             element.style.display = this.externalOnly ? 'none' : '';
         });
-
         if (this.externalOnly) {
             this.filterFolder = 'music';
             this.selectedSubPath = '';
             this.enableReMapping = false;
-            if (this.batchMode) this.toggleBatchMode();
         }
         this.updateBatchUI();
     },

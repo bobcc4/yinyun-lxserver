@@ -24,6 +24,8 @@
 ---
 **Yinyun** is a self-hosted music server with a Web player, downloads, local-library management, encrypted Windows account snapshots, and Subsonic client support.
 
+Yinyun servers can share playlists with one another through expiring links or JSON files. The recipient previews local and online matches before importing a normal playlist; local files are reused when available. The exchange does not include audio files, credentials, tokens, proxies, or temporary URLs, and it does not provide LX Music client import compatibility.
+
 > [!IMPORTANT]
 > v1.5.0 uses fixed entry points: `/` for the Web player and `/admin` for the management console. The former `/music` Web route has been removed. `/api/v1`, Subsonic `/rest`, and the `/server/music` persistent audio directory are unchanged.
 

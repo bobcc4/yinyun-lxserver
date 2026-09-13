@@ -8919,7 +8919,8 @@ function renderMyLists(data) {
             <i class="fas ${icon} w-5 t-text-muted group-hover:text-emerald-500 transition-colors flex-shrink-0"></i>
             ${displayName.length > 8 ? `<div class="ml-2 flex-1 overflow-hidden">${nameHtml}</div>` : nameHtml}
             <span class="text-xs text-gray-300 group-hover:t-text-muted mr-2 flex-shrink-0">${count}</span>
-            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="分享歌单" aria-label="分享歌单" onclick="handleSharePlaylist('${id}', event)"><i class="fas fa-share-alt text-[10px]"></i></button>` : ''}
+            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="跨服务端分享歌单" aria-label="跨服务端分享歌单" onclick="handleExchangeSharePlaylist('${id}', event)"><i class="fas fa-share-alt text-[10px]"></i></button>` : ''}
+            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="导出歌单 JSON" aria-label="导出歌单 JSON" onclick="exportPlaylistExchangeJson('${id}', event)"><i class="fas fa-file-export text-[10px]"></i></button>` : ''}
             ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="重命名歌单" aria-label="重命名歌单" onclick="handleRenameList('${id}', event)"><i class="fas fa-pen text-[10px]"></i></button>` : ''}
             ${id !== 'default' && id !== 'love' ? `<i class="fas fa-trash text-gray-300 hover:text-red-500 hidden group-hover:block flex-shrink-0" onclick="handleRemoveList('${id}', event)"></i>` : ''}
         `;
@@ -9422,6 +9423,93 @@ function stopPlaylistSharePolling() {
 window.handleSharePlaylist = handleSharePlaylist;
 window.togglePlaylistSharingSetting = togglePlaylistSharingSetting;
 window.openPlaylistShareInbox = openPlaylistShareInbox;
+
+// Cross-server Yinyun playlist exchange. This is intentionally separate from
+// the legacy same-server user inbox sharing above.
+async function playlistExchangeRequest(path, options = {}) {
+    const headers = { ...getUserAuthHeaders(), ...(options.headers || {}) };
+    if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    const response = await fetch(path, { ...options, headers });
+    let payload = {};
+    try { payload = await response.json(); } catch (error) { }
+    if (!response.ok) throw new Error(payload?.error?.message || payload?.message || `HTTP ${response.status}`);
+    return payload?.data ?? payload;
+}
+
+function downloadPlaylistExchangeJson(packageData, filename) {
+    const blob = new Blob([JSON.stringify(packageData, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename || 'yinyun-playlist.json';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function handleExchangeSharePlaylist(listId, event) {
+    if (event) event.stopPropagation();
+    if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
+    try {
+        const result = await playlistExchangeRequest('/api/v1/playlist-shares', { method: 'POST', body: JSON.stringify({ playlistId: listId }) });
+        if (result.package) downloadPlaylistExchangeJson(result.package, `${result.package.playlist.name || '歌单'}.json`);
+        if (result.url && navigator.clipboard) await navigator.clipboard.writeText(result.url).catch(() => {});
+        await showInput('歌单分享链接', '链接已复制到剪贴板，也可以手动复制下面的内容：', { defaultValue: result.url || '', confirmText: '完成' });
+        showSuccess('跨服务端歌单分享链接已生成');
+    } catch (error) { showError(error.message || '生成歌单分享链接失败'); }
+}
+
+async function exportPlaylistExchangeJson(listId, event) {
+    if (event) event.stopPropagation();
+    if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
+    try {
+        const result = await playlistExchangeRequest(`/api/v1/playlists/${encodeURIComponent(listId)}/export`);
+        downloadPlaylistExchangeJson(result.package, `${result.package?.playlist?.name || '歌单'}.json`);
+        showSuccess('歌单 JSON 已导出');
+    } catch (error) { showError(error.message || '导出歌单失败'); }
+}
+
+function renderPlaylistExchangePreview(preview, input) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-[230] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+    const statusLabel = { local: '本地命中', online: '在线可用', unmatched: '未匹配' };
+    const statusClass = { local: 'text-emerald-500', online: 'text-blue-500', unmatched: 'text-amber-500' };
+    const rows = (preview.items || []).slice(0, 200).map(item => `<tr class="border-b t-border-main"><td class="py-2 pr-2 text-xs t-text-muted">${Number(item.index) + 1}</td><td class="py-2 pr-2 text-xs font-medium t-text-main">${escapeHtmlText(item.track?.name || '')}</td><td class="py-2 pr-2 text-xs t-text-muted">${escapeHtmlText(item.track?.singer || '')}</td><td class="py-2 pr-2 text-xs t-text-muted">${escapeHtmlText(item.track?.source || '')}</td><td class="py-2 text-xs font-medium ${statusClass[item.status] || 't-text-muted'}">${statusLabel[item.status] || item.status}</td></tr>`).join('');
+    modal.innerHTML = `<div class="t-bg-panel border t-border-main rounded-xl shadow-2xl w-full max-w-4xl max-h-[88vh] overflow-hidden"><div class="px-5 py-4 border-b t-border-main flex items-center justify-between"><div><h3 class="font-bold t-text-main">导入歌单预览</h3><p class="text-xs t-text-muted mt-1">${escapeHtmlText(preview.playlist?.name || '未命名歌单')}</p></div><button type="button" data-exchange-cancel class="w-8 h-8 t-text-muted hover:text-red-500"><i class="fas fa-times"></i></button></div><div class="p-5 overflow-y-auto max-h-[68vh]"><div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-center"><div class="p-3 rounded-lg t-bg-main"><div class="text-lg font-bold t-text-main">${preview.total || 0}</div><div class="text-xs t-text-muted">全部歌曲</div></div><div class="p-3 rounded-lg t-bg-main"><div class="text-lg font-bold text-emerald-500">${preview.localMatches || 0}</div><div class="text-xs t-text-muted">本地命中</div></div><div class="p-3 rounded-lg t-bg-main"><div class="text-lg font-bold text-blue-500">${preview.onlineMatches || 0}</div><div class="text-xs t-text-muted">在线可用</div></div><div class="p-3 rounded-lg t-bg-main"><div class="text-lg font-bold text-amber-500">${preview.unmatched || 0}</div><div class="text-xs t-text-muted">未匹配</div></div></div><div class="overflow-x-auto"><table class="w-full"><thead><tr class="border-b t-border-main text-left"><th class="py-2 pr-2 text-xs t-text-muted">#</th><th class="py-2 pr-2 text-xs t-text-muted">歌曲</th><th class="py-2 pr-2 text-xs t-text-muted">歌手</th><th class="py-2 pr-2 text-xs t-text-muted">平台</th><th class="py-2 text-xs t-text-muted">状态</th></tr></thead><tbody>${rows}</tbody></table></div>${preview.total > 200 ? '<p class="text-xs t-text-muted mt-3">仅展示前 200 首，导入时会保留完整歌单。</p>' : ''}</div><div class="px-5 py-4 border-t t-border-main flex justify-end gap-2"><button type="button" data-exchange-cancel class="px-4 py-2 text-sm t-text-muted">取消</button><button type="button" data-exchange-confirm class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold">确认导入</button></div></div>`;
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelectorAll('[data-exchange-cancel]').forEach(button => button.addEventListener('click', close));
+    modal.querySelector('[data-exchange-confirm]').addEventListener('click', async event => {
+        const button = event.currentTarget;
+        button.disabled = true; button.textContent = '导入中...';
+        try { const result = await playlistExchangeRequest('/api/v1/playlist-import', { method: 'POST', body: JSON.stringify(input) }); close(); await reloadUserFavorites(); showSuccess(`已创建歌单「${result.name}」，共 ${result.trackCount} 首歌曲`); }
+        catch (error) { showError(error.message || '导入歌单失败'); button.disabled = false; button.textContent = '确认导入'; }
+    });
+}
+
+async function importPlaylistExchangeInput(input) {
+    if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
+    try { const preview = await playlistExchangeRequest('/api/v1/playlist-import/preview', { method: 'POST', body: JSON.stringify(input) }); renderPlaylistExchangePreview(preview, input); }
+    catch (error) { showError(error.message || '读取分享歌单失败'); }
+}
+
+async function openPlaylistExchangeImport() {
+    const url = await showInput('导入分享歌单', '请输入另一台音云生成的分享链接：', { placeholder: 'https://example.com/share/playlist/...' });
+    if (url) await importPlaylistExchangeInput({ url: String(url).trim() });
+}
+
+function openPlaylistExchangeJsonImport() {
+    if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json,.json';
+    input.onchange = async () => { const file = input.files?.[0]; if (!file) return; try { await importPlaylistExchangeInput({ package: JSON.parse(await file.text()) }); } catch (error) { showError('JSON 文件无效'); } };
+    input.click();
+}
+
+window.handleExchangeSharePlaylist = handleExchangeSharePlaylist;
+window.exportPlaylistExchangeJson = exportPlaylistExchangeJson;
+window.openPlaylistExchangeImport = openPlaylistExchangeImport;
+window.openPlaylistExchangeJsonImport = openPlaylistExchangeJsonImport;
 
 function formatSongToLxMusicStandard(item) {
     if (!item) return item;

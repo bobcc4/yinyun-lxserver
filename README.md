@@ -102,7 +102,13 @@
   <img src="docs/public/screenshots/admin-users.png" width="900" alt="用户管理页面">
 </p>
 
-### 8. 服务器配置
+### 8. 音云服务端之间分享歌单
+
+Web 播放器可以生成带有效期的歌单分享链接，也可以导出同内容的 JSON 文件。另一台音云服务器登录后可粘贴链接或导入 JSON，在确认导入预览后创建普通歌单；预览会显示歌曲总数、本地命中、在线可用和未匹配数量。接收方本地已有的歌曲仍会保留在歌单中，播放时优先使用本地文件；分享包只包含歌曲识别信息，不包含音频文件、密码、Token、代理或临时播放地址。本功能仅支持音云服务端之间分享，不兼容原版洛雪客户端导入。
+
+详细流程见[歌单与音源分享](https://bobcc4.github.io/yinyun-lxserver/guide/sharing)。
+
+### 9. 服务器配置
 
 可在后台配置访问路径、Subsonic、WebDAV、缓存限制、代理和其他服务端选项，Docker 环境变量仍具有最高优先级。
 
@@ -110,7 +116,7 @@
   <img src="docs/public/screenshots/admin-config.png" width="900" alt="系统配置页面">
 </p>
 
-### 9. Subsonic 协议与全网检索
+### 10. Subsonic 协议与全网检索
 
 适配 Subsonic 协议，可使用音流、LMP、Feishin 等客户端连接本地曲库和歌单。搜索支持 `wy:`、`kg:`、`tx:`、`kw:`、`mg:` 平台前缀，以及 `online:` / `local:` 范围前缀。
 

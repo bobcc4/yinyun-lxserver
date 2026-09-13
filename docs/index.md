@@ -29,8 +29,8 @@ features:
   - title: 多端连接
     details: Windows 加密账户快照与灾难恢复，以及音流、LMP、Feishin 等 Subsonic 客户端接入。
     link: /guide/accounts-sync
-  - title: 分享与音源
-    details: 用户间歌单邀请、管理员音源共享、自定义源隔离、代理与安全设置。
+  - title: 歌单分享与音源
+    details: 音云服务端之间通过链接或 JSON 分享歌单，导入前预览匹配结果；同时支持管理员音源共享、自定义源隔离、代理与安全设置。
     link: /guide/sharing
   - title: 故障排查
     details: 登录、播放、下载、曲库扫描、歌词封面、Subsonic 和桌面客户端常见问题。

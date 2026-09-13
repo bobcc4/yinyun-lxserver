@@ -17,6 +17,7 @@ import * as fileCache from './fileCache'
 import * as serverDownloadQueue from './serverDownloadQueue'
 import * as remasterQueue from './remasterQueue'
 import { createApiV1Handler } from './apiV1'
+import { renderPlaylistExchangePage, PlaylistExchangeError } from './playlistExchange'
 import { APP_VERSION, APP_VERSION_TAG } from '@/version'
 import { classifyApiNamespace } from './apiNamespace'
 import {
@@ -813,6 +814,7 @@ const handleApiV1 = createApiV1Handler({
   getLeaderboardBoards,
   getLeaderboardList,
   networkPlaylistMonitor,
+  getLegacyUsername: verifyUserAuth,
 })
 
 const isPathInside = (child: string, parent: string): boolean => {
@@ -930,6 +932,20 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
     }
 
     if (apiNamespace === 'native' && await handleApiV1(req, res, urlObj)) return
+
+    const publicPlaylistShareMatch = pathname.match(/^\/share\/playlist\/([a-f0-9]{64})$/)
+    if (publicPlaylistShareMatch && req.method === 'GET') {
+      try {
+        const html = renderPlaylistExchangePage(publicPlaylistShareMatch[1])
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(html)
+      } catch (error: any) {
+        const status = error instanceof PlaylistExchangeError ? error.statusCode : 404
+        res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
+        res.end(error?.message || '分享链接不存在或已失效')
+      }
+      return
+    }
 
     // Fixed Web entry points and static asset namespaces.
     const normalizePath = (p: string) => (p || '').replace(/\/+$/, '')

@@ -30,6 +30,15 @@ import {
 } from './apiV1Contract'
 import { normalizeLyricsResponse } from './utils/apiLyrics'
 import type { NetworkPlaylistMonitor } from './networkPlaylistMonitor'
+import {
+  createPlaylistExchange,
+  getPlaylistExchange,
+  importPlaylistExchange,
+  PlaylistExchangeError,
+  previewPlaylistExchange,
+  resolvePlaylistExchangeInput,
+  revokePlaylistExchange,
+} from './playlistExchange'
 
 const API_PREFIX = '/api/v1'
 const ACCESS_TOKEN_TTL = 60 * 60
@@ -59,6 +68,7 @@ interface ApiV1Dependencies {
   getLeaderboardBoards: (source: string, username: string) => Promise<any>
   getLeaderboardList: (source: string, bangid: string, page: number, username: string) => Promise<any>
   networkPlaylistMonitor: NetworkPlaylistMonitor
+  getLegacyUsername?: (req: IncomingMessage) => string | null
 }
 
 interface ApiErrorShape {
@@ -173,11 +183,21 @@ const requireUser = (req: IncomingMessage, deps: ApiV1Dependencies, url?: URL) =
     const trackId = url.pathname.match(/^\/api\/v1\/library\/tracks\/([^/]+)\/(?:stream|cover)$/)?.[1]
     if (mediaPayload && trackId && mediaPayload.trackId === decodeURIComponent(trackId)) payload = mediaPayload
   }
-  const username = payload ? tryNormalizeUsername(payload.sub) : null
+  const username = payload
+    ? tryNormalizeUsername(payload.sub)
+    : (deps.getLegacyUsername ? tryNormalizeUsername(deps.getLegacyUsername(req) || '') : null)
   if (!username || !deps.getUsers().some(user => user.name === username)) {
     throw new ApiError(401, 'unauthorized', '登录状态无效或已过期')
   }
   return username
+}
+
+const getRequestBaseUrl = (req: IncomingMessage) => {
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
+  const host = (forwardedHost || String(req.headers.host || 'localhost:9527')).replace(/[\r\n]/g, '')
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+  const protocol = forwardedProto === 'https' || (req.socket as any).encrypted ? 'https' : 'http'
+  return `${protocol}://${host}`
 }
 
 const parsePositiveInt = (value: string | null, fallback: number, max: number) => {
@@ -466,6 +486,11 @@ export const apiV1OpenApi = {
     '/api/v1/tracks/qualities': { get: { summary: '查询支持的音质标识' } },
     '/api/v1/lyrics': { post: { summary: '读取歌词' } },
     '/api/v1/playlists': { get: { summary: '查询歌单' }, post: { summary: '创建歌单' } },
+    '/api/v1/playlists/{id}/export': { get: { summary: '导出歌单 JSON' } },
+    '/api/v1/playlist-shares': { post: { summary: '创建跨音云服务端分享链接' } },
+    '/api/v1/playlist-shares/{token}': { get: { security: [], summary: '读取公开歌单分享包' }, delete: { summary: '撤销歌单分享链接' } },
+    '/api/v1/playlist-import/preview': { post: { summary: '预览跨服务端歌单导入' } },
+    '/api/v1/playlist-import': { post: { summary: '导入跨服务端歌单' } },
     '/api/v1/downloads': { get: { summary: '查询服务端下载队列' }, post: { summary: '加入服务端下载队列' } },
     '/api/v1/replacement': { get: { summary: '查询洗版任务' }, post: { summary: '启动洗版任务' } },
     '/api/v1/sources': { get: { summary: '查询可用音源及平台开关' } },
@@ -503,6 +528,12 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
           replacement: true,
           customSources: true,
           playlistSharing: true,
+          playlistExchange: {
+            create: true,
+            preview: true,
+            import: true,
+            jsonExport: true,
+          },
           accountSync: {
             schemaVersion: ACCOUNT_SYNC_SCHEMA_VERSION,
             maxSnapshotBytes: ACCOUNT_SYNC_MAX_BYTES,
@@ -519,6 +550,12 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
 
     if (pathname === `${API_PREFIX}/openapi.json` && req.method === 'GET') {
       json(res, 200, apiV1OpenApi, { 'Cache-Control': 'public, max-age=300' })
+      return true
+    }
+
+    const exchangePublicMatch = pathname.match(/^\/api\/v1\/playlist-shares\/([a-f0-9]{64})$/)
+    if (exchangePublicMatch && req.method === 'GET') {
+      success(res, { package: getPlaylistExchange(exchangePublicMatch[1]) })
       return true
     }
 
@@ -552,6 +589,41 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
     }
 
     const username = requireUser(req, deps, url)
+
+    if (pathname === `${API_PREFIX}/playlist-shares` && req.method === 'POST') {
+      const body = await readJson(req)
+      success(res, await createPlaylistExchange(
+        username,
+        body.playlistId,
+        deps.serverVersion,
+        String(global.lx.config.serverName || ''),
+        getRequestBaseUrl(req),
+        Number(body.expiresInMs),
+      ), 201)
+      return true
+    }
+
+    const exchangeManageMatch = pathname.match(/^\/api\/v1\/playlist-shares\/([a-f0-9]{64})$/)
+    if (exchangeManageMatch && req.method === 'DELETE') {
+      success(res, revokePlaylistExchange(username, exchangeManageMatch[1]))
+      return true
+    }
+
+    if (pathname === `${API_PREFIX}/playlist-import/preview` && req.method === 'POST') {
+      const body = await readJson(req, 2 * 1024 * 1024 + 64 * 1024)
+      const packageData = await resolvePlaylistExchangeInput(body)
+      success(res, await previewPlaylistExchange(username, packageData, (source, currentUser) => deps.isSourceSupported(source, currentUser)))
+      return true
+    }
+
+    if (pathname === `${API_PREFIX}/playlist-import` && req.method === 'POST') {
+      const body = await readJson(req, 2 * 1024 * 1024 + 64 * 1024)
+      const packageData = await resolvePlaylistExchangeInput(body)
+      const preview = await previewPlaylistExchange(username, packageData, (source, currentUser) => deps.isSourceSupported(source, currentUser))
+      const imported = await importPlaylistExchange(username, packageData, deps.normalizeSongInfo, body.name)
+      success(res, { ...imported, preview }, 201)
+      return true
+    }
 
     if (pathname === `${API_PREFIX}/player/network-playlists/status` && req.method === 'GET') {
       success(res, deps.networkPlaylistMonitor.getStatus(username))
@@ -809,6 +881,21 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
       return true
     }
 
+    const playlistExportMatch = pathname.match(/^\/api\/v1\/playlists\/([^/]+)\/export$/)
+    if (playlistExportMatch && req.method === 'GET') {
+      const exchange = await createPlaylistExchange(
+        username,
+        decodeURIComponent(playlistExportMatch[1]),
+        deps.serverVersion,
+        String(global.lx.config.serverName || ''),
+        getRequestBaseUrl(req),
+        60 * 60 * 1000,
+      )
+      await revokePlaylistExchange(username, exchange.token)
+      success(res, { package: exchange.package })
+      return true
+    }
+
     const playlistMatch = pathname.match(/^\/api\/v1\/playlists\/([^/]+)(?:\/tracks(?:\/([^/]+))?)?$/)
     if (playlistMatch) {
       const playlistId = decodeURIComponent(playlistMatch[1])
@@ -986,6 +1073,8 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
     throw new ApiError(404, 'endpoint_not_found', '接口不存在')
   } catch (error: any) {
     if (error instanceof PlaylistSharingError) {
+      failure(res, { status: error.statusCode, code: error.code, message: error.message })
+    } else if (error instanceof PlaylistExchangeError) {
       failure(res, { status: error.statusCode, code: error.code, message: error.message })
     } else if (error instanceof ApiError) {
       failure(res, error)
