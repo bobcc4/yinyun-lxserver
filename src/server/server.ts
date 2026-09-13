@@ -34,6 +34,7 @@ import { parseLyrics, serializeLyrics, normalizeLyricOutputFormat } from '@/util
 import { registerPlaybackResolver, resolveOriginalPlatformFirst } from './playbackResolverRegistry'
 import { migrateLegacySubsonicSourcePriority, SUBSONIC_SOURCE_PRIORITY_VALUE } from './subsonicSearch'
 import { normalizeUsername, tryNormalizeUsername, validateUsername } from '@/utils/username'
+import { normalizePublicUrl } from '@/utils/publicUrl'
 import { normalizeAdminPath, DEFAULT_ADMIN_PATH, isAdminPath } from '@/adminPath'
 import { getUserIsAdmin, withUserRole } from '@/userRoles'
 import crypto from 'node:crypto'
@@ -5041,6 +5042,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             'user.cacheSizeLimit': global.lx.config['user.cacheSizeLimit'],
             'frontend.password': global.lx.config['frontend.password'],
             'admin.path': global.lx.config['admin.path'] || DEFAULT_ADMIN_PATH,
+            'server.publicUrl': global.lx.config['server.publicUrl'] || '',
             'webdav.enable': global.lx.config['webdav.enable'] ?? false,
             'webdav.url': global.lx.config['webdav.url'] || '',
             'webdav.username': global.lx.config['webdav.username'] || '',
@@ -5087,6 +5089,16 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
               if (newConfig['admin.path'] !== undefined) {
                 try {
                   global.lx.config['admin.path'] = normalizeAdminPath(newConfig['admin.path'])
+                } catch (error: any) {
+                  res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+                  res.end(JSON.stringify({ success: false, error: error.message }))
+                  return
+                }
+              }
+
+              if (newConfig['server.publicUrl'] !== undefined) {
+                try {
+                  global.lx.config['server.publicUrl'] = normalizePublicUrl(newConfig['server.publicUrl'])
                 } catch (error: any) {
                   res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
                   res.end(JSON.stringify({ success: false, error: error.message }))
@@ -5159,6 +5171,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
                 disableTelemetry: global.lx.config.disableTelemetry,
                 'frontend.password': global.lx.config['frontend.password'],
                 'admin.path': global.lx.config['admin.path'] || DEFAULT_ADMIN_PATH,
+                'server.publicUrl': global.lx.config['server.publicUrl'] || '',
                 'webdav.enable': global.lx.config['webdav.enable'],
                 'webdav.url': global.lx.config['webdav.url'],
                 'webdav.username': global.lx.config['webdav.username'],

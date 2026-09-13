@@ -652,6 +652,12 @@
                                         placeholder="/admin" />
                                     <small class="config-hint">例如 /control-7f3a。仅改变管理页面入口，不改变 /api/v1/admin 接口；不能使用 /、/api、/rest 等保留路径。</small>
                                 </div>
+                                <div class="config-field">
+                                    <label class="config-label">公网访问地址</label>
+                                    <input type="url" name="server.publicUrl" class="form-input config-input"
+                                        placeholder="https://music.example.com:16666" />
+                                    <small class="config-hint">用于跨服务端歌单分享链接。请填写外部可访问的完整地址，不要附加 /music、/admin 或 /rest；未配置时只能导出 JSON，不能生成分享链接。</small>
+                                </div>
                             </div>
                         </div>
 

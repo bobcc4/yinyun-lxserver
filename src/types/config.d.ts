@@ -96,6 +96,9 @@ declare namespace LX {
     /** 管理后台页面入口路径 */
     'admin.path'?: string
 
+    /** 跨服务端歌单分享使用的公网访问地址 */
+    'server.publicUrl'?: string
+
     /**
      * 是否启用 WebDAV 同步服务
      */

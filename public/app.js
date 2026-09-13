@@ -1737,6 +1737,9 @@ class App {
             if (form.elements['admin.path']) {
                 form.elements['admin.path'].value = config['admin.path'] || '/admin';
             }
+            if (form.elements['server.publicUrl']) {
+                form.elements['server.publicUrl'].value = config['server.publicUrl'] || '';
+            }
 
             // WebDAV 配置
             if (form.elements['webdav.enable']) {
@@ -1925,6 +1928,7 @@ class App {
             'user.cacheSizeLimit': parseInt(formData.get('user.cacheSizeLimit')) || 2000,
             'frontend.password': formData.get('frontend.password'),
             'admin.path': (formData.get('admin.path') || '').trim() || '/admin',
+            'server.publicUrl': (formData.get('server.publicUrl') || '').trim(),
             'webdav.enable': formData.get('webdav.enable') === 'on',
             'webdav.url': formData.get('webdav.url'),
             'webdav.username': formData.get('webdav.username'),

@@ -78,7 +78,7 @@
 
 以下接口使用 `Authorization: Bearer <accessToken>`，Web 播放器也兼容当前账户的 `x-user-token` 会话令牌。
 
-- `POST /api/v1/playlist-shares`: 根据 `{"playlistId": "..."}` 创建带有效期的只读分享链接。
+- `POST /api/v1/playlist-shares`: 根据 `{"playlistId": "..."}` 创建带有效期的只读分享链接；需要管理员配置 `server.publicUrl`。
 - `GET /api/v1/playlist-shares/<token>`: 公开读取分享 JSON 包，不需要登录。
 - `DELETE /api/v1/playlist-shares/<token>`: 撤销当前用户创建的分享链接。
 - `GET /api/v1/playlists/<id>/export`: 导出歌单 JSON，不创建长期分享链接。

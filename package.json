@@ -1,6 +1,6 @@
 {
   "name": "yinyun",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "scripts": {
     "test": "tsx --test test/**/*.test.ts",

@@ -26,7 +26,7 @@ test('cross-server playlist exchange preserves tracks and creates a normal playl
   }
 
   const { getUserSpace, releaseUserSpace } = await import('../src/user')
-  const { createPlaylistExchange, previewPlaylistExchange, importPlaylistExchange } = await import('../src/server/playlistExchange')
+  const { createPlaylistExchange, previewPlaylistExchange, importPlaylistExchange, PlaylistExchangeError } = await import('../src/server/playlistExchange')
   const song = {
     id: 'tx_001',
     songmid: '001',
@@ -56,6 +56,11 @@ test('cross-server playlist exchange preserves tracks and creates a normal playl
     const receiver = await getUserSpace('receiver').listManage.getListData()
     assert.equal(receiver.userList.length, 1)
     assert.equal(receiver.userList[0].list[0].id, 'tx_001')
+
+    await assert.rejects(
+      () => createPlaylistExchange('owner', 'playlist-1', '1.7.1', 'Test Yinyun', ''),
+      (error: unknown) => error instanceof PlaylistExchangeError && error.code === 'public_url_not_configured',
+    )
   } finally {
     releaseUserSpace('owner', true)
     releaseUserSpace('receiver', true)

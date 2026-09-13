@@ -32,6 +32,7 @@ import { normalizeLyricsResponse } from './utils/apiLyrics'
 import type { NetworkPlaylistMonitor } from './networkPlaylistMonitor'
 import {
   createPlaylistExchange,
+  createPlaylistExchangePackage,
   getPlaylistExchange,
   importPlaylistExchange,
   PlaylistExchangeError,
@@ -190,14 +191,6 @@ const requireUser = (req: IncomingMessage, deps: ApiV1Dependencies, url?: URL) =
     throw new ApiError(401, 'unauthorized', '登录状态无效或已过期')
   }
   return username
-}
-
-const getRequestBaseUrl = (req: IncomingMessage) => {
-  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
-  const host = (forwardedHost || String(req.headers.host || 'localhost:9527')).replace(/[\r\n]/g, '')
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
-  const protocol = forwardedProto === 'https' || (req.socket as any).encrypted ? 'https' : 'http'
-  return `${protocol}://${host}`
 }
 
 const parsePositiveInt = (value: string | null, fallback: number, max: number) => {
@@ -597,7 +590,7 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
         body.playlistId,
         deps.serverVersion,
         String(global.lx.config.serverName || ''),
-        getRequestBaseUrl(req),
+        String(global.lx.config['server.publicUrl'] || ''),
         Number(body.expiresInMs),
       ), 201)
       return true
@@ -883,16 +876,13 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
 
     const playlistExportMatch = pathname.match(/^\/api\/v1\/playlists\/([^/]+)\/export$/)
     if (playlistExportMatch && req.method === 'GET') {
-      const exchange = await createPlaylistExchange(
+      const packageData = await createPlaylistExchangePackage(
         username,
         decodeURIComponent(playlistExportMatch[1]),
         deps.serverVersion,
         String(global.lx.config.serverName || ''),
-        getRequestBaseUrl(req),
-        60 * 60 * 1000,
       )
-      await revokePlaylistExchange(username, exchange.token)
-      success(res, { package: exchange.package })
+      success(res, { package: packageData })
       return true
     }
 

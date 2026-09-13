@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getUserSpace } from '@/user'
 import { normalizeUsername } from '@/utils/username'
+import { normalizePublicUrl } from '@/utils/publicUrl'
 import * as fileCache from './fileCache'
 
 export const PLAYLIST_EXCHANGE_FORMAT = 'yinyun-playlist'
@@ -175,6 +176,17 @@ const buildPackage = async (username: string, playlistId: string, serverVersion:
   })
 }
 
+export const createPlaylistExchangePackage = async (
+  username: string,
+  playlistId: unknown,
+  serverVersion: string,
+  serverName: string,
+) => {
+  const normalizedUser = normalizeUsername(username)
+  if (typeof playlistId !== 'string' || !playlistId) throw new PlaylistExchangeError(400, 'invalid_playlist', '请选择要分享的歌单')
+  return buildPackage(normalizedUser, playlistId, serverVersion, serverName)
+}
+
 const writeStored = (stored: StoredPlaylistExchange) => {
   fs.mkdirSync(getExchangeDir(), { recursive: true })
   fs.writeFileSync(getExchangePath(stored.token), JSON.stringify(stored, null, 2), 'utf8')
@@ -204,16 +216,17 @@ export const createPlaylistExchange = async (
   expiryMs = DEFAULT_EXPIRY_MS,
 ) => {
   const normalizedUser = normalizeUsername(username)
-  if (typeof playlistId !== 'string' || !playlistId) throw new PlaylistExchangeError(400, 'invalid_playlist', '请选择要分享的歌单')
-  const packageData = await buildPackage(normalizedUser, playlistId, serverVersion, serverName)
+  const publicUrl = normalizePublicUrl(baseUrl)
+  if (!publicUrl) throw new PlaylistExchangeError(409, 'public_url_not_configured', '未配置公网访问地址，请先在管理后台的系统配置中填写公网访问地址')
+  const packageData = await createPlaylistExchangePackage(normalizedUser, playlistId, serverVersion, serverName)
   const token = crypto.randomBytes(32).toString('hex')
   const createdAt = Date.now()
   const expiresAt = createdAt + Math.min(Math.max(Number(expiryMs) || DEFAULT_EXPIRY_MS, 60 * 60 * 1000), MAX_EXPIRY_MS)
   writeStored({ token, owner: normalizedUser, createdAt, expiresAt, package: packageData })
   return {
     token,
-    url: `${baseUrl.replace(/\/$/, '')}/share/playlist/${token}`,
-    apiUrl: `${baseUrl.replace(/\/$/, '')}/api/v1/playlist-shares/${token}`,
+    url: `${publicUrl}/share/playlist/${token}`,
+    apiUrl: `${publicUrl}/api/v1/playlist-shares/${token}`,
     expiresAt,
     package: packageData,
   }

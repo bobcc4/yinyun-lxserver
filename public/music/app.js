@@ -8919,8 +8919,8 @@ function renderMyLists(data) {
             <i class="fas ${icon} w-5 t-text-muted group-hover:text-emerald-500 transition-colors flex-shrink-0"></i>
             ${displayName.length > 8 ? `<div class="ml-2 flex-1 overflow-hidden">${nameHtml}</div>` : nameHtml}
             <span class="text-xs text-gray-300 group-hover:t-text-muted mr-2 flex-shrink-0">${count}</span>
-            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="跨服务端分享歌单" aria-label="跨服务端分享歌单" onclick="handleExchangeSharePlaylist('${id}', event)"><i class="fas fa-share-alt text-[10px]"></i></button>` : ''}
-            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="导出歌单 JSON" aria-label="导出歌单 JSON" onclick="exportPlaylistExchangeJson('${id}', event)"><i class="fas fa-file-export text-[10px]"></i></button>` : ''}
+            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="分享给本站用户" aria-label="分享给本站用户" onclick="handleSharePlaylist('${id}', event)"><i class="fas fa-user-friends text-[10px]"></i></button>` : ''}
+            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="跨服务端分享或导出 JSON" aria-label="跨服务端分享或导出 JSON" onclick="handlePlaylistExchangeMenu('${id}', event)"><i class="fas fa-share-alt text-[10px]"></i></button>` : ''}
             ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="重命名歌单" aria-label="重命名歌单" onclick="handleRenameList('${id}', event)"><i class="fas fa-pen text-[10px]"></i></button>` : ''}
             ${id !== 'default' && id !== 'love' ? `<i class="fas fa-trash text-gray-300 hover:text-red-500 hidden group-hover:block flex-shrink-0" onclick="handleRemoveList('${id}', event)"></i>` : ''}
         `;
@@ -9453,11 +9453,21 @@ async function handleExchangeSharePlaylist(listId, event) {
     if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
     try {
         const result = await playlistExchangeRequest('/api/v1/playlist-shares', { method: 'POST', body: JSON.stringify({ playlistId: listId }) });
-        if (result.package) downloadPlaylistExchangeJson(result.package, `${result.package.playlist.name || '歌单'}.json`);
         if (result.url && navigator.clipboard) await navigator.clipboard.writeText(result.url).catch(() => {});
         await showInput('歌单分享链接', '链接已复制到剪贴板，也可以手动复制下面的内容：', { defaultValue: result.url || '', confirmText: '完成' });
         showSuccess('跨服务端歌单分享链接已生成');
     } catch (error) { showError(error.message || '生成歌单分享链接失败'); }
+}
+
+async function handlePlaylistExchangeMenu(listId, event) {
+    if (event) event.stopPropagation();
+    if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
+    const choice = await showOptions('跨服务端歌单', '请选择要执行的操作', ['生成分享链接', '导出 JSON']);
+    if (choice === '生成分享链接') {
+        await handleExchangeSharePlaylist(listId);
+    } else if (choice === '导出 JSON') {
+        await exportPlaylistExchangeJson(listId);
+    }
 }
 
 async function exportPlaylistExchangeJson(listId, event) {
@@ -9507,6 +9517,7 @@ function openPlaylistExchangeJsonImport() {
 }
 
 window.handleExchangeSharePlaylist = handleExchangeSharePlaylist;
+window.handlePlaylistExchangeMenu = handlePlaylistExchangeMenu;
 window.exportPlaylistExchangeJson = exportPlaylistExchangeJson;
 window.openPlaylistExchangeImport = openPlaylistExchangeImport;
 window.openPlaylistExchangeJsonImport = openPlaylistExchangeJsonImport;

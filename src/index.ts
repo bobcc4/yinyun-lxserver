@@ -17,6 +17,7 @@ if (typeof (global as any).navigator === 'undefined') {
 
 import { initLogger, sanitizeLogText } from '@/utils/log4js'
 import defaultConfig from './defaultConfig'
+import { normalizePublicUrl } from './utils/publicUrl'
 import { migrateLegacySubsonicSourcePriority } from './server/subsonicSearch'
 import { ENV_PARAMS, File } from './constants'
 import { checkAndCreateDirSync } from './utils'
@@ -164,6 +165,12 @@ const margeConfig = (p: string) => {
     console.warn(`Invalid admin.path, using /admin: ${error.message}`)
     newConfig['admin.path'] = '/admin'
   }
+  try {
+    newConfig['server.publicUrl'] = normalizePublicUrl(newConfig['server.publicUrl'])
+  } catch (error: any) {
+    console.warn(`Invalid server.publicUrl, disabled: ${error.message}`)
+    newConfig['server.publicUrl'] = ''
+  }
   newConfig['subsonic.onlineSearchSources'] = migrateLegacySubsonicSourcePriority(newConfig['subsonic.onlineSearchSources']) as string
   global.lx.config = newConfig
 
@@ -203,6 +210,14 @@ if (envParams.ADMIN_PATH) {
   } catch (error: any) {
     console.warn(`Invalid ADMIN_PATH, using /admin: ${error.message}`)
     global.lx.config['admin.path'] = '/admin'
+  }
+}
+if (envParams.PUBLIC_URL) {
+  try {
+    global.lx.config['server.publicUrl'] = normalizePublicUrl(envParams.PUBLIC_URL)
+  } catch (error: any) {
+    console.warn(`Invalid PUBLIC_URL, disabled: ${error.message}`)
+    global.lx.config['server.publicUrl'] = ''
   }
 }
 if (envParams.WEBDAV_ENABLE) {
