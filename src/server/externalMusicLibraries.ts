@@ -15,6 +15,16 @@ export interface ExternalMusicLibrary {
   createdAt: number
 }
 
+export interface ExternalMusicLibraryCandidate {
+  username: string
+  name: string
+  mounted: boolean
+  registered: boolean
+  containerPath: string
+  hostPath: string
+  libraryId?: string
+}
+
 const getDataPath = () => String((global as any).lx?.dataPath || path.join(process.cwd(), 'data'))
 const getConfigPath = () => path.join(getDataPath(), EXTERNAL_CONFIG_FILE)
 const getExternalRoot = () => path.join(process.cwd(), 'external')
@@ -135,3 +145,64 @@ export const getExternalLibraryInfo = (library: ExternalMusicLibrary) => ({
   containerPath: getExternalLibraryContainerPath(library),
   hostPath: getExternalMusicPath(library),
 })
+
+/**
+ * Discover directories that are already mounted below /server/external.
+ * Discovery is intentionally read-only; registration still requires an
+ * explicit administrator action.
+ */
+export const discoverExternalMusicLibraries = (): ExternalMusicLibraryCandidate[] => {
+  const root = getExternalRoot()
+  if (!fs.existsSync(root)) return []
+
+  const libraries = readLibraries()
+  const registeredByKey = new Map(
+    libraries.map(library => [`${library.username}\0${library.name.toLowerCase()}`, library]),
+  )
+  const candidates: ExternalMusicLibraryCandidate[] = []
+
+  let userEntries: fs.Dirent[]
+  try {
+    userEntries = fs.readdirSync(root, { withFileTypes: true })
+  } catch (error: any) {
+    if (error?.code === 'ENOENT' || error?.code === 'EACCES') return []
+    throw error
+  }
+
+  for (const userEntry of userEntries) {
+    if (!userEntry.isDirectory()) continue
+    let username: string
+    try {
+      username = normalizeUsername(userEntry.name)
+    } catch {
+      continue
+    }
+    if (!userExists(username)) continue
+
+    const userRoot = path.join(root, username)
+    let libraryEntries: fs.Dirent[]
+    try {
+      libraryEntries = fs.readdirSync(userRoot, { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    for (const libraryEntry of libraryEntries) {
+      if (!libraryEntry.isDirectory() || !EXTERNAL_NAME_PATTERN.test(libraryEntry.name)) continue
+      const name = libraryEntry.name
+      const key = `${username}\0${name.toLowerCase()}`
+      const registered = registeredByKey.get(key)
+      candidates.push({
+        username,
+        name,
+        mounted: true,
+        registered: !!registered,
+        containerPath: `/server/external/${username}/${name}`,
+        hostPath: path.join(userRoot, name),
+        ...(registered ? { libraryId: registered.id } : {}),
+      })
+    }
+  }
+
+  return candidates.sort((a, b) => `${a.username}/${a.name}`.localeCompare(`${b.username}/${b.name}`))
+}

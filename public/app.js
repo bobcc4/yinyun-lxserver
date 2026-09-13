@@ -131,6 +131,7 @@ class App {
         document.getElementById('external-library-user')?.addEventListener('change', () => this.updateExternalLibraryPath());
         document.getElementById('add-external-library-btn')?.addEventListener('click', () => this.addExternalLibrary());
         document.getElementById('refresh-external-libraries-btn')?.addEventListener('click', () => this.loadExternalLibraries());
+        document.getElementById('discover-external-libraries-btn')?.addEventListener('click', () => this.discoverExternalLibraries());
         // 日志查看
         document.getElementById('refresh-logs-btn')?.addEventListener('click', () => this.loadLogs());
         document.getElementById('log-type-select')?.addEventListener('change', () => this.loadLogs());
@@ -1815,21 +1816,66 @@ class App {
             const libraries = await this.request('/api/v1/admin/external-libraries');
             if (!libraries.length) {
                 list.innerHTML = '<p style="color: var(--text-secondary);">暂未配置外部音乐库</p>';
-                return;
+            } else {
+                list.innerHTML = libraries.map(library => `
+                    <div class="config-field-row" style="align-items:center; margin-bottom: .75rem;">
+                        <div style="flex:1; min-width:0;">
+                            <strong>${this.escapeHtml(library.username)} / ${this.escapeHtml(library.name)}</strong>
+                            <div class="config-hint">${this.escapeHtml(library.containerPath)} · ${library.enabled ? '已启用' : '已停用'}</div>
+                        </div>
+                        <button type="button" class="btn-secondary external-library-rescan" data-id="${this.escapeHtml(library.id)}">重新扫描</button>
+                        <button type="button" class="btn-secondary external-library-delete" data-id="${this.escapeHtml(library.id)}">删除配置</button>
+                    </div>`).join('');
+                list.querySelectorAll('.external-library-rescan').forEach(button => button.addEventListener('click', () => this.rescanExternalLibrary(button.dataset.id)));
+                list.querySelectorAll('.external-library-delete').forEach(button => button.addEventListener('click', () => this.deleteExternalLibrary(button.dataset.id)));
             }
-            list.innerHTML = libraries.map(library => `
-                <div class="config-field-row" style="align-items:center; margin-bottom: .75rem;">
-                    <div style="flex:1; min-width:0;">
-                        <strong>${this.escapeHtml(library.username)} / ${this.escapeHtml(library.name)}</strong>
-                        <div class="config-hint">${this.escapeHtml(library.containerPath)} · ${library.enabled ? '已启用' : '已停用'}</div>
-                    </div>
-                    <button type="button" class="btn-secondary external-library-rescan" data-id="${this.escapeHtml(library.id)}">重新扫描</button>
-                    <button type="button" class="btn-secondary external-library-delete" data-id="${this.escapeHtml(library.id)}">删除配置</button>
-                </div>`).join('');
-            list.querySelectorAll('.external-library-rescan').forEach(button => button.addEventListener('click', () => this.rescanExternalLibrary(button.dataset.id)));
-            list.querySelectorAll('.external-library-delete').forEach(button => button.addEventListener('click', () => this.deleteExternalLibrary(button.dataset.id)));
+            await this.discoverExternalLibraries(true);
         } catch (error) {
             list.innerHTML = `<p style="color: var(--accent-error);">外部音乐库加载失败：${this.escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    async discoverExternalLibraries(silent = false) {
+        const container = document.getElementById('external-libraries-discovered');
+        if (!container || !this.password) return;
+        const button = document.getElementById('discover-external-libraries-btn');
+        if (button) button.disabled = true;
+        try {
+            const candidates = await this.request('/api/v1/admin/external-libraries/discover');
+            const pending = candidates.filter(candidate => !candidate.registered);
+            if (!pending.length) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">未发现待导入的外部挂载目录。</p>';
+                return;
+            }
+            container.innerHTML = `
+                <div class="config-hint" style="margin-bottom:.5rem;">发现以下已挂载目录，请确认后导入：</div>
+                ${pending.map(candidate => `
+                    <div class="config-field-row" style="align-items:center; margin-bottom:.75rem;">
+                        <div style="flex:1; min-width:0;">
+                            <strong>${this.escapeHtml(candidate.username)} / ${this.escapeHtml(candidate.name)}</strong>
+                            <div class="config-hint">${this.escapeHtml(candidate.containerPath)}</div>
+                        </div>
+                        <button type="button" class="btn-primary external-library-import" data-username="${this.escapeHtml(candidate.username)}" data-name="${this.escapeHtml(candidate.name)}">导入并扫描</button>
+                    </div>`).join('')}`;
+            container.querySelectorAll('.external-library-import').forEach(button => button.addEventListener('click', () => this.importDiscoveredExternalLibrary(button.dataset.username, button.dataset.name)));
+        } catch (error) {
+            container.innerHTML = `<p style="color: var(--accent-error);">扫描外部挂载目录失败：${this.escapeHtml(error.message)}</p>`;
+        } finally {
+            if (button) button.disabled = false;
+            if (!silent && typeof showInfo === 'function') showInfo('外部挂载目录扫描完成');
+        }
+    }
+
+    async importDiscoveredExternalLibrary(username, name) {
+        try {
+            await this.request('/api/v1/admin/external-libraries/import', {
+                method: 'POST',
+                body: JSON.stringify({ username, name }),
+            });
+            showSuccess(`已导入 ${username} / ${name}，音乐索引扫描完成`);
+            await this.loadExternalLibraries();
+        } catch (error) {
+            showError(`导入外部音乐库失败：${error.message}`);
         }
     }
 

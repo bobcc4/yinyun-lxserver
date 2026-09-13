@@ -156,6 +156,15 @@
   - **参数示例**: `{"singer.sourcePriority": ["tx", "wy"]}`
   - **验证**: 某些字段（如 `singer.sourcePriority`）会进行合法性校验。
 
+### 7.1 外部音乐库
+
+- `GET /api/v1/admin/external-libraries`: 获取已登记的外部音乐库。
+- `POST /api/v1/admin/external-libraries`: 手动登记用户和库名称。
+- `GET /api/v1/admin/external-libraries/discover`: 扫描 `/server/external/<用户名>/<库名称>` 下已挂载的目录，只返回发现结果，不自动登记。
+- `POST /api/v1/admin/external-libraries/import`: 确认导入一个已发现目录并立即扫描索引。
+- `POST /api/v1/admin/external-libraries/<ID>/rescan`: 重新扫描指定外部音乐库。
+- `DELETE /api/v1/admin/external-libraries/<ID>`: 删除配置和索引，不删除宿主机文件。
+
 ---
 
 ## 8. Web 播放器专属 API

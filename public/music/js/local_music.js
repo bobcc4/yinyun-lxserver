@@ -1412,11 +1412,19 @@ window.LocalMusicManager = {
             if (typeof window.unobserveLazyImages === 'function') {
                 window.unobserveLazyImages(container);
             }
-            container.innerHTML = `
-                <div class="text-center py-20 text-gray-500">
-                    <i class="fas fa-inbox text-4xl mb-4 opacity-50"></i>
-                    <p>没有找到相关${this.externalOnly ? '外部' : '本地'}音乐</p>
-                </div>`;
+            const noExternalLibrary = this.externalOnly && this.originalData.length === 0;
+            container.innerHTML = noExternalLibrary
+                ? `
+                    <div class="text-center py-20 text-gray-500">
+                        <i class="fas fa-folder-open text-4xl mb-4 opacity-50"></i>
+                        <p class="font-bold t-text-main mb-2">暂未找到外部音乐库</p>
+                        <p class="text-sm">请联系管理员在后台管理新增外部音乐库</p>
+                    </div>`
+                : `
+                    <div class="text-center py-20 text-gray-500">
+                        <i class="fas fa-inbox text-4xl mb-4 opacity-50"></i>
+                        <p>没有找到相关本地音乐</p>
+                    </div>`;
             return;
         }
 

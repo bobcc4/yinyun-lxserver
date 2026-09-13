@@ -41,6 +41,7 @@ import { MusicTagger, MetaPicture } from './musicTagger'
 import { NetworkPlaylistMonitor } from './networkPlaylistMonitor'
 import {
   createExternalMusicLibrary,
+  discoverExternalMusicLibraries,
   type ExternalMusicLibrary,
   getExternalLibraryInfo,
   getExternalLocation,
@@ -1115,6 +1116,49 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
           })
           return
         }
+      }
+
+      if (pathname === '/api/v1/admin/external-libraries/discover' && req.method === 'GET') {
+        const auth = req.headers['x-frontend-auth']
+        if (auth !== global.lx.config['frontend.password']) {
+          res.writeHead(401)
+          res.end('Unauthorized')
+          return
+        }
+        try {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+          res.end(JSON.stringify(discoverExternalMusicLibraries()))
+        } catch (error: any) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, message: error?.message || 'Discovery failed' }))
+        }
+        return
+      }
+
+      if (pathname === '/api/v1/admin/external-libraries/import' && req.method === 'POST') {
+        const auth = req.headers['x-frontend-auth']
+        if (auth !== global.lx.config['frontend.password']) {
+          res.writeHead(401)
+          res.end('Unauthorized')
+          return
+        }
+        void readBody(req).then(async body => {
+          try {
+            const payload = JSON.parse(body)
+            const username = String(payload.username || '')
+            const name = String(payload.name || '')
+            const candidate = discoverExternalMusicLibraries().find(item => item.username === username && item.name === name)
+            if (!candidate) throw new Error('未发现对应的外部挂载目录，请检查 Compose 映射')
+            const library = createExternalMusicLibrary(username, name)
+            await fileCache.syncCacheIndex(library.username, ['music'], getExternalLocation(library))
+            res.writeHead(201, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+            res.end(JSON.stringify({ ...getExternalLibraryInfo(library), imported: true }))
+          } catch (error: any) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, message: error?.message || 'Import failed' }))
+          }
+        })
+        return
       }
 
       const externalLibraryMatch = pathname.match(/^\/api\/v1\/admin\/external-libraries\/([^/]+)(?:\/(rescan))?$/)

@@ -180,7 +180,7 @@ services:
 
 ### 外部音乐库
 
-已有歌曲位于 NAS 其他目录时，可在管理后台 **系统配置 → 外部音乐库** 配置用户和库名称。系统会为 `admin / bendigequ` 使用固定路径 `/server/external/admin/bendigequ`，Compose 映射示例：
+已有歌曲位于 NAS 其他目录时，可在管理后台 **系统配置 → 外部音乐库** 点击“扫描已挂载目录”。系统会发现 `/server/external/<用户名>/<库名称>` 下已经挂载的目录，管理员确认“导入并扫描”后即可使用；也可以继续手动填写用户和库名称。系统会为 `admin / bendigequ` 使用固定路径 `/server/external/admin/bendigequ`，Compose 映射示例：
 
 ```yaml
 - /volume1/media/music:/server/external/admin/bendigequ:ro

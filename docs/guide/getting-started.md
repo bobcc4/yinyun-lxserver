@@ -37,7 +37,7 @@ services:
 
 ### 外部音乐库
 
-如果歌曲已经位于 NAS 的其他目录，不需要移动文件。进入管理后台 **系统配置 → 外部音乐库**，选择同步用户并填写库名称，例如 `bendigequ`。系统会显示固定容器路径 `/server/external/admin/bendigequ`。在 Compose 中加入：
+如果歌曲已经位于 NAS 的其他目录，不需要移动文件。进入管理后台 **系统配置 → 外部音乐库**，点击“扫描已挂载目录”，确认发现的目录后选择“导入并扫描”。系统会自动识别 `/server/external/<用户名>/<库名称>` 下已挂载的目录；也可以手动选择同步用户并填写库名称，例如 `bendigequ`。系统会显示固定容器路径 `/server/external/admin/bendigequ`。在 Compose 中加入：
 
 ```yaml
 - /volume1/media/music:/server/external/admin/bendigequ:ro
