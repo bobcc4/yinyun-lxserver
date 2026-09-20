@@ -635,7 +635,13 @@ async function handleHeaderLogout(e) {
 window.handleHeaderLogout = handleHeaderLogout;
 
 // 页面加载时恢复并验证同步账户状态
-(async () => {
+const initialUserAuthReady = new Promise(resolve => {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', resolve, { once: true });
+    } else {
+        resolve();
+    }
+}).then(async () => {
     try {
         window.lx_config = window.CONFIG || {};
 
@@ -679,7 +685,7 @@ window.handleHeaderLogout = handleHeaderLogout;
     } catch (error) {
         console.error('[Auth] 初始化检查失败:', error);
     }
-})();
+});
 
 // ===== 同步账户认证结束 =====
 
@@ -6408,10 +6414,24 @@ async function clearCache(type) {
 }
 
 // 更新服务器缓存大小统计
+const cacheStatsRequests = new Map();
 async function updateServerCacheSize() {
+    await initialUserAuthReady;
     const cacheEl = document.getElementById('server-cache-info');
     const musicEl = document.getElementById('server-music-info');
     if (!cacheEl && !musicEl) return;
+
+    const username = normalizeSyncUsername(localStorage.getItem('lx_sync_user'));
+    const setStatus = text => {
+        if (normalizeSyncUsername(localStorage.getItem('lx_sync_user')) !== username) return;
+        if (cacheEl) cacheEl.textContent = text;
+        if (musicEl) musicEl.textContent = text;
+    };
+    if (!isUserLoggedIn()) {
+        setStatus('请先登录同步账户');
+        return;
+    }
+    if (cacheStatsRequests.has(username)) return cacheStatsRequests.get(username);
 
     const formatSize = (size) => {
         if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
@@ -6420,31 +6440,53 @@ async function updateServerCacheSize() {
         return size + ' B';
     };
 
-    try {
-        if (cacheEl) cacheEl.textContent = '计算中...';
-        if (musicEl) musicEl.textContent = '计算中...';
-
-        const headers = getUserAuthHeaders();
-        const response = await fetch('/api/v1/player/music/cache/stats', { headers });
-        if (!response.ok) throw new Error('获取缓存统计失败');
-
-        const data = await response.json();
-        if (data.success && data.data) {
-            const stats = data.data;
-
-            if (musicEl && stats.music) {
-                musicEl.textContent = `音乐: ${formatSize(stats.music.totalSize)} (${stats.music.fileCount} 首)`;
+    const request = (async () => {
+        try {
+            setStatus('计算中...');
+            if (!userToken && !(await ensureUserAuthToken())) {
+                setStatus('请重新登录同步账户');
+                return;
             }
-            if (cacheEl && stats.cache) {
-                cacheEl.textContent = `缓存: ${formatSize(stats.cache.totalSize)} (${stats.cache.fileCount} 首)`;
+            if (normalizeSyncUsername(localStorage.getItem('lx_sync_user')) !== username) return;
+            const fetchStats = () => fetch('/api/v1/player/music/cache/stats', {
+                headers: getUserAuthHeaders(), cache: 'no-store'
+            });
+            let response = await fetchStats();
+            if (response.status === 401 && await ensureUserAuthToken({ force: true })) {
+                if (normalizeSyncUsername(localStorage.getItem('lx_sync_user')) !== username) return;
+                response = await fetchStats();
             }
-        } else {
-            throw new Error(data.message || '获取失败');
+            if (normalizeSyncUsername(localStorage.getItem('lx_sync_user')) !== username) return;
+            if (response.status === 401 || response.status === 403) {
+                setStatus(response.status === 401 ? '请重新登录同步账户' : '无权查看缓存统计');
+                return;
+            }
+            if (!response.ok) throw new Error('缓存统计接口 HTTP ' + response.status);
+
+            const data = await response.json();
+            if (normalizeSyncUsername(localStorage.getItem('lx_sync_user')) !== username || !isUserLoggedIn()) return;
+            if (data.success && data.data) {
+                const stats = data.data;
+
+                if (musicEl && stats.music) {
+                    musicEl.textContent = `音乐: ${formatSize(stats.music.totalSize)} (${stats.music.fileCount} 首)`;
+                }
+                if (cacheEl && stats.cache) {
+                    cacheEl.textContent = `缓存: ${formatSize(stats.cache.totalSize)} (${stats.cache.fileCount} 首)`;
+                }
+            } else {
+                throw new Error(data.message || '获取失败');
+            }
+        } catch (e) {
+            console.warn('[Cache] 更新服务端统计失败:', e);
+            setStatus('获取失败，请稍后刷新');
         }
-    } catch (e) {
-        console.warn('[Cache] 更新服务端统计失败:', e);
-        if (cacheEl) cacheEl.textContent = '获取失败';
-        if (musicEl) musicEl.textContent = '获取失败';
+    })();
+    cacheStatsRequests.set(username, request);
+    try {
+        await request;
+    } finally {
+        cacheStatsRequests.delete(username);
     }
 }
 

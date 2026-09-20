@@ -7,6 +7,8 @@ window.soundEffects = (function () {
     let eqFilters = [];
     let convolverNode, convolverMainGain, convolverSendGain;
     let pitchShifterNode, pitchFactorParam;
+    let pitchShifterLoading = false;
+    let pitchShifterUnavailable = false;
     let pannerNode;
     let pannerInfo = { enable: false, speed: 25, distance: 5, rad: 0, interval: null };
 
@@ -125,8 +127,14 @@ window.soundEffects = (function () {
 
     async function initPitchShifter() {
         if (!audioContext) return;
-        if (pitchShifterNode) return;
+        if (pitchShifterNode || pitchShifterLoading || pitchShifterUnavailable) return;
+        if (!audioContext.audioWorklet?.addModule || typeof AudioWorkletNode !== 'function') {
+            pitchShifterUnavailable = true;
+            renderUI();
+            return;
+        }
 
+        pitchShifterLoading = true;
         try {
             console.log('[SoundEffects] Loading Pitch Shifter Module from /_player/js/pitch-shifter/phase-vocoder.js');
             await audioContext.audioWorklet.addModule('/_player/js/pitch-shifter/phase-vocoder.js');
@@ -149,7 +157,12 @@ window.soundEffects = (function () {
                 connectPitchShifter();
             }
         } catch (e) {
+            pitchShifterUnavailable = true;
+            disconnectPitchShifter();
+            renderUI();
             console.error('[SoundEffects] Failed to initialize pitch shifter:', e);
+        } finally {
+            pitchShifterLoading = false;
         }
     }
 
@@ -347,7 +360,7 @@ window.soundEffects = (function () {
             pitchFactorParam.setTargetAtTime(settings.pitch, audioContext.currentTime, 0.05);
         }
         const label = document.getElementById('pitch-val');
-        if (label) label.innerText = settings.pitch.toFixed(2) + 'x';
+        if (label) label.innerText = pitchShifterUnavailable ? '当前环境不支持变调' : settings.pitch.toFixed(2) + 'x';
     }
 
     function renderUI() {
@@ -459,7 +472,9 @@ window.soundEffects = (function () {
         const pitchInput = document.getElementById('pitch-slider');
         if (pitchInput) {
             pitchInput.value = settings.pitch;
-            document.getElementById('pitch-val').innerText = settings.pitch.toFixed(2) + 'x';
+            pitchInput.disabled = pitchShifterUnavailable;
+            pitchInput.title = pitchShifterUnavailable ? '变调需要支持 AudioWorklet 的浏览器及 HTTPS 或本机访问' : '';
+            applyPitch();
         }
 
         const pannerEnableInput = document.getElementById('panner-enable');
@@ -567,6 +582,7 @@ window.soundEffects = (function () {
             renderUI(); // Update radio selection state
         },
         setPitch: function (val) {
+            if (pitchShifterUnavailable) return;
             const oldPitch = settings.pitch;
             settings.pitch = parseFloat(val);
 
