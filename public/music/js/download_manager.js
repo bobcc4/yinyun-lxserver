@@ -126,6 +126,7 @@ class DownloadManager {
     }
 
     async syncServerConcurrency() {
+        await window.waitForUserAuthReady?.();
         if (!this.canUseServerQueue()) return;
         try {
             await this.requestServerQueue('/api/v1/player/music/cache/queue/concurrency', { concurrency: this.maxConcurrent });
@@ -149,6 +150,7 @@ class DownloadManager {
     }
 
     async requestServerQueue(path, body, allowAuthRetry = true) {
+        await window.waitForUserAuthReady?.();
         if (!this.canUseServerQueue()) throw new Error('请先登录同步账户');
         const options = { method: body === undefined ? 'GET' : 'POST', headers: this.getServerQueueHeaders() };
         if (body !== undefined) options.body = JSON.stringify(body);

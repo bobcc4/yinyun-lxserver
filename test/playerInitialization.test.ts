@@ -11,6 +11,7 @@ function declaration(source: string, name: string) {
   let result = ''
   function visit(node: ts.Node) {
     if (ts.isFunctionDeclaration(node) && node.name?.text === name) result = node.getText(ast)
+    if (ts.isMethodDeclaration(node) && node.name.getText(ast) === name) result = node.getText(ast).replace(/^async /, 'async function ')
     if (ts.isVariableStatement(node) && node.declarationList.declarations.some(d => d.name.getText(ast) === name)) result = node.getText(ast)
     ts.forEachChild(node, visit)
   }
@@ -66,6 +67,39 @@ function statsHarness() {
 const statsResponse = { ok: true, status: 200, json: async () => ({ success: true, data: {
   cache: { totalSize: 1024, fileCount: 1 }, music: { totalSize: 2048, fileCount: 2 },
 } }) }
+
+for (const name of ['loadNetworkListStatusesV162', 'fetchCustomSources', 'requestServerQueue']) {
+  test(name + ' waits for restored authentication before sending a request', async () => {
+    let release!: () => void
+    const ready = new Promise<void>(resolve => { release = resolve })
+    let requests = 0
+    let token = 'expired'
+    const context = vm.createContext({
+      initialUserAuthReady: ready,
+      isUserLoggedIn: () => true,
+      localStorage: { getItem: (key: string) => key === 'lx_sync_user' ? 'admin' : '' },
+      getUserAuthHeaders: () => ({ token }),
+      getServerQueueHeaders: () => ({ token }),
+      canUseServerQueue: () => true,
+      applyNetworkListStatusesV162: () => {}, console,
+      fetch: async (_: string, options: any) => {
+        requests++
+        assert.equal(options.headers.token, 'renewed')
+        return { ok: true, status: 200, json: async () => ({ success: true, data: [] }) }
+      },
+    })
+    context.window = context
+    const source = name === 'requestServerQueue' ? fs.readFileSync('public/music/js/download_manager.js', 'utf8') : app
+    vm.runInContext(declaration(app, 'waitForUserAuthReady') + '\n' + declaration(source, name), context)
+    const pending = vm.runInContext(name + "('/queue')", context)
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(requests, 0)
+    token = 'renewed'
+    release()
+    await pending
+    assert.equal(requests, 1)
+  })
+}
 
 test('guest cache statistics do not send an unauthorized request', async () => {
   const h = statsHarness()

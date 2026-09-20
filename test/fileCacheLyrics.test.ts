@@ -132,3 +132,28 @@ test('external cover lookup only reads the music index', async () => {
 
   assert.equal(cover, null)
 })
+
+test('local generated IDs retrieve embedded lyrics and prefer a sibling LRC', () => {
+  const filename = 'local-embedded-lyrics.wav'
+  const target = path.join(fileCache.getCacheDir('admin', true), filename)
+  fs.copyFileSync(path.resolve(previousCwd, 'public/music/assets/medias/filters/bright-hall.wav'), target)
+  const tagger = new MusicTagger()
+  try {
+    tagger.loadPath(target)
+    tagger.title = 'Local song'
+    tagger.artist = 'Local artist'
+    tagger.lyrics = '[00:01.00]Embedded lyrics'
+    tagger.save()
+  } finally { tagger.dispose() }
+  const checkTagger = new MusicTagger().loadPath(target)
+  assert.equal(checkTagger.lyrics, '[00:01.00]Embedded lyrics')
+  checkTagger.dispose()
+  fileCache.indexManager.update('admin', {
+    id: 'unknown_local_song', source: 'unknown', name: 'Local song', singer: 'Local artist',
+    album: '', filename, folder: 'music', quality: 'wav', ext: 'wav', size: fs.statSync(target).size, mtime: Date.now(),
+  }, 'music')
+  const song = { source: 'wy', songmid: 'unknown_local_song', name: 'Local song', singer: 'Local artist' }
+  assert.equal(fileCache.getLocalLyrics(song, 'admin').source, 'embedded')
+  fs.writeFileSync(target.replace(/\.wav$/, '.lrc'), '[00:01.00]Sidecar lyrics')
+  assert.equal(fileCache.getLocalLyrics(song, 'admin').source, 'sidecar')
+})

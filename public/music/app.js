@@ -302,6 +302,7 @@ function applyNetworkListStatusesV162(statuses) {
 }
 
 async function loadNetworkListStatusesV162() {
+    await waitForUserAuthReady();
     if (!isUserLoggedIn()) return [];
     const response = await fetch('/api/v1/player/network-playlists/status', {
         headers: getUserAuthHeaders(), cache: 'no-store'
@@ -322,6 +323,7 @@ function setupNetworkListAutoCheck() {
 }
 
 async function checkNetworkListUpdates(manual = false) {
+    await waitForUserAuthReady();
     if (!isUserLoggedIn()) {
         if (manual && window.showToast) showToast('info', '请先登录同步账户', 3000);
         return [];
@@ -688,6 +690,13 @@ const initialUserAuthReady = new Promise(resolve => {
 });
 
 // ===== 同步账户认证结束 =====
+
+async function waitForUserAuthReady() {
+    // Defer even calls made while this script is still being evaluated.
+    await Promise.resolve();
+    await initialUserAuthReady;
+    return isUserLoggedIn();
+}
 
 // 音质选择器初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -7082,7 +7091,7 @@ async function fetchLyric(song, quality = null) {
 
     if (settings.enableServerLyricCache !== false) {
         try {
-            const serverCacheUrl = `${API_BASE}/cache/lyric?source=${source}&songmid=${songmid}&songId=${encodeURIComponent(song.id || '')}&name=${encodeURIComponent(song.name || '')}&singer=${encodeURIComponent(song.singer || '')}`;
+            const serverCacheUrl = `${API_BASE}/cache/lyric?source=${encodeURIComponent(source)}&songmid=${encodeURIComponent(songmid)}&songId=${encodeURIComponent(song.id || '')}&name=${encodeURIComponent(song.name || '')}&singer=${encodeURIComponent(song.singer || '')}`;
             const scRes = await fetch(serverCacheUrl, { headers });
             if (scRes.ok) {
                 const scData = await scRes.json();
@@ -10265,6 +10274,7 @@ async function loadCustomSources() {
 // ========== 自定义源管理逻辑 ==========
 
 async function fetchCustomSources() {
+    await waitForUserAuthReady();
     const username = localStorage.getItem('lx_sync_user') || '';
     if (!isUserLoggedIn() || !username) return null;
 

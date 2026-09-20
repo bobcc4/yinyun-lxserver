@@ -3595,13 +3595,20 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
           singer: urlObj.searchParams.get('singer') || '',
         }
         const localLyricResult = lyricUsername
-          ? fileCache.checkLyricCache(lyricCacheQuery, lyricUsername)
+          ? fileCache.getLocalLyrics(lyricCacheQuery, lyricUsername)
           : { exists: false, content: null }
 
         if (localLyricResult.exists && localLyricResult.content) {
           console.log(`[Lyric] 命中本地 .lrc 缓存: ${source}_${songmid}`)
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' })
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' })
           res.end(JSON.stringify({ ...localLyricResult.content, _fromLocalCache: true }))
+          return
+        }
+
+        // Locally generated IDs are not valid provider song IDs.
+        if (/^(unknown|local)_/i.test(songmid) || source === 'unknown' || source === 'local') {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' })
+          res.end(JSON.stringify({ lyric: '', tlyric: '', rlyric: '', lxlyric: '' }))
           return
         }
 
@@ -3642,7 +3649,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
           // [Fallback] 网络请求失败时，再次尝试本地 .lrc 文件（防止 Step2 miss 但物理文件存在的情况）
           const fallbackResult = lyricUsername
-            ? fileCache.checkLyricCache(lyricCacheQuery, lyricUsername)
+            ? fileCache.getLocalLyrics(lyricCacheQuery, lyricUsername)
             : { exists: false, content: null }
           if (fallbackResult.exists && fallbackResult.content) {
             console.log(`[Lyric] 网络失败，fallback 到本地 .lrc: ${source}_${songmid}`)
@@ -3679,13 +3686,14 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 
         const name = urlObj.searchParams.get('name') || ''
         const singer = urlObj.searchParams.get('singer') || ''
-        const result = fileCache.checkLyricCache({ source, songmid, id: songId, name, singer }, username)
+        const result = fileCache.getLocalLyrics({ source, songmid, id: songId, name, singer }, username)
+        res.setHeader('Cache-Control', 'private, no-store')
         if (result.exists) {
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: true, data: result.content }))
         } else {
-          res.writeHead(404, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ success: false, message: 'Not found in cache' }))
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, data: null, message: 'Not found in cache' }))
         }
         return
       }
