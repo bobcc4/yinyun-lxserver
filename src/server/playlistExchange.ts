@@ -130,7 +130,7 @@ const sanitizeTrack = (song: any): PlaylistExchangeTrack => {
   }
 }
 
-const validatePackage = (value: unknown): PlaylistExchangePackage => {
+export const validatePackage = (value: unknown): PlaylistExchangePackage => {
   if (!isPlainObject(value) || value.format !== PLAYLIST_EXCHANGE_FORMAT || value.schemaVersion !== PLAYLIST_EXCHANGE_SCHEMA_VERSION) {
     throw new PlaylistExchangeError(400, 'invalid_playlist_package', '分享包格式或版本不受支持')
   }

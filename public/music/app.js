@@ -109,7 +109,6 @@ const DEFAULT_SETTINGS = {
     embedLyricToFile: true, // 下载时将歌词嵌入文件（标签+.lrc）
     sidecarLyricFormat: 'line', // 外置歌词格式: line | word | enhanced
     embedLyricFormat: 'enhanced', // 内嵌歌词格式: line | word | enhanced
-    serverCacheLocation: 'root', // 缓存位置: 'data' (synced) or 'root' (local)
     serverCacheNamingPattern: 'simple', // 缓存命名规则: standard | simple
     enableRemaster: false, // 启用下载目录歌曲洗版
     enableLyricCache: true,
@@ -135,6 +134,7 @@ function normalizeDownloadConcurrency(value) {
 function normalizeStoredSettings(nextSettings) {
     if (!nextSettings || typeof nextSettings !== 'object') return nextSettings;
     delete nextSettings.remasterRetryManifest;
+    delete nextSettings.serverCacheLocation;
     if (!DEFAULT_ENTRY_TABS.has(nextSettings.defaultEntry)) {
         nextSettings.defaultEntry = DEFAULT_SETTINGS.defaultEntry;
     }
@@ -358,9 +358,8 @@ window.checkNetworkListUpdates = checkNetworkListUpdates;
 
 // Initial Sync for Server Cache Config
 setTimeout(() => {
-    if (settings.serverCacheLocation && window.updateServerCacheConfig) {
-        console.log('[ServerCache] Syncing config:', settings.serverCacheLocation, settings.serverCacheNamingPattern);
-        window.updateServerCacheConfig(settings.serverCacheLocation, settings.serverCacheNamingPattern);
+    if (isUserLoggedIn() && settings.serverCacheNamingPattern && window.updateServerCacheConfig) {
+        window.updateServerCacheConfig(settings.serverCacheNamingPattern);
     }
 }, 2000);
 
@@ -3102,6 +3101,7 @@ function applyMarqueeChecks(root = document) {
                 firstGap.className = 'mx-8';
                 const secondText = document.createElement('span');
                 secondText.textContent = text;
+                secondText.setAttribute('aria-hidden', 'true');
                 const secondGap = document.createElement('span');
                 secondGap.className = 'mx-8';
                 track.append(firstText, firstGap, secondText, secondGap);
@@ -4231,8 +4231,7 @@ async function triggerServerCache(song, url, quality) {
 
 let lastNamingPattern = window.settings?.serverCacheNamingPattern || 'simple';
 
-async function updateServerCacheConfig(location, pattern) {
-    const loc = location || window.settings?.serverCacheLocation || 'root';
+async function updateServerCacheConfig(pattern) {
     const pat = pattern || window.settings?.serverCacheNamingPattern || 'simple';
     const oldPattern = lastNamingPattern;
 
@@ -4247,7 +4246,6 @@ async function updateServerCacheConfig(location, pattern) {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
-                location: loc,
                 namingPattern: pat
             })
         });
@@ -4255,11 +4253,10 @@ async function updateServerCacheConfig(location, pattern) {
             console.warn('[ServerCache] Config update failed:', response.status);
             // 失败时回滚 UI
             if (typeof syncSettingsUI === 'function') {
-                if (location) syncSettingsUI('serverCacheLocation', settings.serverCacheLocation);
                 if (pattern) syncSettingsUI('serverCacheNamingPattern', settings.serverCacheNamingPattern);
             }
         } else {
-            console.log('[Cache] 服务器配置已同步:', loc, pat);
+            console.log('[Cache] 服务器命名配置已同步:', pat);
 
             // 如果命名模式真的发生了变化（且不是初始化同步）
             if (pattern && oldPattern && pattern !== oldPattern) {
@@ -5968,7 +5965,7 @@ async function updateSetting(key, value) {
     if (SETTINGS_UI_MAP[key]?.normalize) {
         value = SETTINGS_UI_MAP[key].normalize(value);
     }
-    const restrictedKeys = ['enableServerCache', 'enableServerLyricCache', 'serverCacheLocation', 'serverCacheNamingPattern', 'downloadConcurrency', 'enableOnlyDownloadMode', 'enableRemaster', 'preferredQuality', 'embedLyricToFile', 'preferServerCache'];
+    const restrictedKeys = ['enableServerCache', 'enableServerLyricCache', 'serverCacheNamingPattern', 'downloadConcurrency', 'enableOnlyDownloadMode', 'enableRemaster', 'preferredQuality', 'embedLyricToFile', 'preferServerCache'];
     const enableLoginCacheRestriction = window.lx_config?.['user.enableLoginCacheRestriction'];
     const isAdmin = !!localStorage.getItem('lx_admin_password');
 
@@ -6187,7 +6184,6 @@ const SETTINGS_UI_MAP = {
     embedLyricFormat: { id: 'setting-embed-lyric-format', type: 'value' },
     preferServerCache: { id: 'setting-prefer-server-cache', type: 'checkbox' },
     enableOnlyDownloadMode: { id: 'setting-only-download-mode', type: 'checkbox' },
-    serverCacheLocation: { id: 'setting-server-cache-location', type: 'value' },
     serverCacheNamingPattern: {
         id: 'setting-server-cache-naming',
         type: 'value',
@@ -6226,7 +6222,7 @@ const SETTINGS_UI_MAP = {
 function syncSettingsUI(key = null, value = null) {
     const enableLoginCacheRestriction = window.lx_config?.['user.enableLoginCacheRestriction'];
     const isAdmin = !!localStorage.getItem('lx_admin_password');
-    const restrictedKeys = ['enableServerCache', 'enableServerLyricCache', 'serverCacheLocation', 'serverCacheNamingPattern', 'downloadConcurrency', 'enableOnlyDownloadMode', 'enableRemaster', 'preferredQuality', 'embedLyricToFile', 'preferServerCache'];
+    const restrictedKeys = ['enableServerCache', 'enableServerLyricCache', 'serverCacheNamingPattern', 'downloadConcurrency', 'enableOnlyDownloadMode', 'enableRemaster', 'preferredQuality', 'embedLyricToFile', 'preferServerCache'];
 
     const updateItem = (itemKey, itemValue, isSingle) => {
         const config = SETTINGS_UI_MAP[itemKey];
@@ -8999,8 +8995,35 @@ function openPlaylistMenu(listObj, anchor, event) {
     menu.querySelector('button')?.focus();
 }
 
+let sidebarPlaylistNameObserver = null;
+
+function observeSidebarPlaylistNames(container) {
+    const names = [...container.querySelectorAll('.playlist-sidebar-name.dynamic-marquee')];
+    const widths = new WeakMap();
+    const measure = (el, force = false) => {
+        if (!el.isConnected || el.clientWidth <= 0) return;
+        if (!force && widths.get(el) === el.clientWidth) return;
+        widths.set(el, el.clientWidth);
+        el.textContent = el.dataset.text;
+        el.classList.remove('overflow-hidden');
+        el.classList.add('truncate');
+        applyMarqueeChecks(el.parentElement);
+    };
+    if (typeof ResizeObserver !== 'undefined') {
+        sidebarPlaylistNameObserver = new ResizeObserver(entries => {
+            entries.forEach(entry => measure(entry.target));
+        });
+        names.forEach(el => sidebarPlaylistNameObserver.observe(el));
+    }
+    names.forEach(el => measure(el));
+    // Fonts can finish loading without changing the width of the name column.
+    document.fonts?.ready.then(() => names.forEach(el => measure(el, true)));
+}
+
 function renderMyLists(data) {
     if (closePlaylistMenu) closePlaylistMenu();
+    sidebarPlaylistNameObserver?.disconnect();
+    sidebarPlaylistNameObserver = null;
     const container = document.getElementById('my-lists-container');
     container.innerHTML = '';
 
@@ -9032,6 +9055,10 @@ function renderMyLists(data) {
         const nameElement = div.querySelector('.playlist-sidebar-name');
         nameElement.textContent = displayName;
         nameElement.title = displayName;
+        if (typeof listObj !== 'string') {
+            nameElement.classList.add('dynamic-marquee', 'truncate');
+            nameElement.dataset.text = displayName;
+        }
         div.querySelector('.playlist-sidebar-count').textContent = String(count);
         const more = div.querySelector('.playlist-more');
         if (typeof listObj !== 'string') more.onclick = event => openPlaylistMenu(listObj, more, event);
@@ -9054,17 +9081,18 @@ function renderMyLists(data) {
     // ---- 常驻：收藏歌手 / 收藏专辑 ----
     const createLibItem = (id, name, icon, countId, clickFn) => {
         const div = document.createElement('div');
-        div.className = "px-6 py-2 text-sm t-text-muted hover:t-bg-main cursor-pointer flex items-center group transition-colors overflow-hidden";
+        div.className = "playlist-sidebar-row text-sm t-text-muted hover:t-bg-main cursor-pointer group transition-colors";
         div.setAttribute('data-sidebar-list-id', id);
         div.setAttribute('data-sidebar-sort-id', id);
         div.onclick = clickFn;
         div.innerHTML = `
-            <span class="favorite-sidebar-drag-handle cursor-grab t-text-muted/60 hover:text-emerald-500 mr-2 flex-shrink-0 touch-none" title="拖拽排序">
+            <span class="favorite-sidebar-drag-handle cursor-grab t-text-muted touch-none" title="拖拽排序">
                 <i class="fas fa-grip-vertical text-xs"></i>
             </span>
-            <i class="fas ${icon} w-5 t-text-muted group-hover:text-emerald-500 transition-colors flex-shrink-0"></i>
-            <span class="ml-2 flex-1 truncate">${name}</span>
-            <span id="${countId}" class="text-xs text-gray-300 group-hover:t-text-muted mr-2 flex-shrink-0">0</span>
+            <span class="playlist-sidebar-icon"><i class="fas ${icon}" aria-hidden="true"></i></span>
+            <span class="playlist-sidebar-name">${name}</span>
+            <span id="${countId}" class="playlist-sidebar-count text-xs">0</span>
+            <span aria-hidden="true"></span>
         `;
         return div;
     };
@@ -9089,6 +9117,7 @@ function renderMyLists(data) {
     }
 
     getOrderedFavoriteSidebarItems(sidebarItems).forEach(item => container.appendChild(item.el));
+    observeSidebarPlaylistNames(container);
     refreshLibrarySidebarCount();
     initFavoriteSidebarSortable(container);
     refreshFavoritesChildrenHeight();
@@ -9635,9 +9664,104 @@ async function openPlaylistExchangeImport() {
 
 function openPlaylistExchangeJsonImport() {
     if (!isUserLoggedIn()) { showError('请先登录同步账户'); return; }
-    const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json,.json';
-    input.onchange = async () => { const file = input.files?.[0]; if (!file) return; try { await importPlaylistExchangeInput({ package: JSON.parse(await file.text()) }); } catch (error) { showError('JSON 文件无效'); } };
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.lxmc';
+    input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        if (file.size > 8 * 1024 * 1024) { showError('歌单文件不能超过 8 MB'); return; }
+        try {
+            const base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result).split(',')[1]);
+                reader.onerror = () => reject(new Error('无法读取歌单文件'));
+                reader.readAsDataURL(file);
+            });
+            const result = await playlistExchangeRequest('/api/v1/playlist-import/file', {
+                method: 'POST', body: JSON.stringify({ name: file.name, base64 }),
+            });
+            if (result.format === 'yinyun' && result.playlists?.length === 1) {
+                await importPlaylistExchangeInput({ package: result.playlists[0].package });
+            } else renderPlaylistFilePreview(result);
+        } catch (error) { showError(error.message || '读取歌单文件失败'); }
+    };
     input.click();
+}
+
+function renderPlaylistFilePreview(result) {
+    const lists = result.playlists || [];
+    if (!lists.length) { showError('文件中没有歌单'); return; }
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-[230] flex items-center justify-center p-3 bg-black/60';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', '导入歌单文件预览');
+    const rows = lists.map((entry, index) => {
+        const playlist = entry.package.playlist;
+        const tracks = playlist.tracks || [];
+        const songRows = tracks.slice(0, 200).map((track, i) => `<tr class="border-b t-border-main"><td class="p-2">${i + 1}</td><td class="p-2 break-words">${escapeHtmlText(track.name)}</td><td class="p-2 break-words">${escapeHtmlText(track.singer)}</td><td class="p-2">${escapeHtmlText(track.source)}</td></tr>`).join('');
+        const warnings = (entry.warnings || []).map(item => `<li>${item.index}. ${escapeHtmlText(item.name)}：${escapeHtmlText(item.reason)}</li>`).join('');
+        return `<section class="py-3 border-b t-border-main" data-file-row="${index}"><div class="flex items-start gap-2"><input type="checkbox" aria-label="${escapeHtmlText(playlist.name)}" data-file-select="${index}" ${tracks.length ? 'checked' : 'disabled'} class="mt-1 accent-emerald-600"><div class="min-w-0 flex-1"><span class="font-medium break-words">${escapeHtmlText(playlist.name)}</span><p class="text-xs t-text-muted mt-1">共 ${entry.total} 首，可导入 ${tracks.length} 首${entry.skipped ? `，跳过 ${entry.skipped} 首` : ''}</p><p data-file-status class="text-xs mt-1" role="status"></p></div></div><details class="mt-2 text-sm"><summary class="cursor-pointer t-text-muted">歌曲预览${tracks.length > 200 ? '（前 200 首）' : ''}</summary><div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead><tr><th class="p-2">#</th><th class="p-2">歌曲</th><th class="p-2">歌手</th><th class="p-2">平台</th></tr></thead><tbody>${songRows}</tbody></table></div>${warnings ? `<ul class="text-amber-600 break-words mt-2 space-y-1">${warnings}</ul>${entry.skipped > 100 ? '<p class="t-text-muted">仅展示前 100 条跳过原因。</p>' : ''}` : ''}</details></section>`;
+    }).join('');
+    modal.innerHTML = `<div class="t-bg-panel t-text-main border t-border-main rounded-lg shadow-xl w-full max-w-3xl max-h-[88vh] flex flex-col"><header class="p-4 border-b t-border-main flex items-center justify-between gap-3"><h3 class="font-bold">导入歌单文件预览</h3><button type="button" data-file-close class="w-8 h-8 shrink-0 t-text-muted" aria-label="关闭"><i class="fas fa-times"></i></button></header><div class="px-4 py-3 overflow-y-auto min-h-0"><p class="text-sm t-text-muted mb-2">仅导入歌单，不导入设置、音源或音频文件。同名歌单会新建副本，不覆盖已有内容。</p><label class="text-sm flex items-center gap-2"><input type="checkbox" data-file-all class="accent-emerald-600">全选</label>${rows}</div><footer class="p-4 border-t t-border-main flex justify-end items-center gap-3"><span data-file-count class="text-xs t-text-muted" aria-live="polite"></span><button type="button" data-file-confirm class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm shrink-0 disabled:opacity-50">确认导入</button></footer></div>`;
+    document.body.appendChild(modal);
+    const confirm = modal.querySelector('[data-file-confirm]');
+    const close = modal.querySelector('[data-file-close]');
+    const all = modal.querySelector('[data-file-all]');
+    const boxes = [...modal.querySelectorAll('[data-file-select]')];
+    let importing = false;
+    const completed = new Set();
+    const refresh = () => {
+        const available = boxes.filter(box => !box.disabled);
+        const selected = available.filter(box => box.checked);
+        all.checked = available.length > 0 && selected.length === available.length;
+        all.indeterminate = selected.length > 0 && selected.length < available.length;
+        all.disabled = importing || !available.length;
+        confirm.disabled = importing || !selected.length;
+        modal.querySelector('[data-file-count]').textContent = `已选择 ${selected.length} 个歌单`;
+    };
+    boxes.forEach(box => box.addEventListener('change', refresh));
+    all.addEventListener('change', () => { boxes.filter(box => !box.disabled).forEach(box => { box.checked = all.checked; }); refresh(); });
+    close.addEventListener('click', () => { if (!importing) modal.remove(); });
+    confirm.addEventListener('click', async () => {
+        if (importing) return;
+        const selected = boxes.filter(box => box.checked && !box.disabled);
+        importing = true;
+        close.disabled = true;
+        boxes.forEach(box => { box.disabled = true; });
+        refresh();
+        let failed = false;
+        for (const box of selected) {
+            const index = Number(box.dataset.fileSelect);
+            const status = modal.querySelector(`[data-file-row="${index}"] [data-file-status]`);
+            confirm.textContent = '导入中...';
+            try {
+                const imported = await playlistExchangeRequest('/api/v1/playlist-import', {
+                    method: 'POST', body: JSON.stringify({ package: lists[index].package }),
+                });
+                completed.add(index);
+                box.checked = false;
+                status.textContent = `已创建「${imported.name}」，${imported.trackCount} 首歌曲`;
+                status.className = 'text-xs mt-1 text-emerald-600';
+            } catch (error) {
+                failed = true;
+                status.textContent = error.message || '导入失败';
+                status.className = 'text-xs mt-1 text-red-500';
+                break;
+            }
+        }
+        importing = false;
+        close.disabled = false;
+        confirm.textContent = failed ? '重试未完成歌单' : '确认导入';
+        boxes.forEach(box => {
+            const index = Number(box.dataset.fileSelect);
+            box.disabled = completed.has(index) || !lists[index].package.playlist.tracks.length;
+        });
+        refresh();
+        try { await reloadUserFavorites(); } catch (error) { showError('歌单已保存，刷新列表失败，请重新打开歌单'); }
+        if (!failed) { modal.remove(); showSuccess(`已导入 ${completed.size} 个歌单`); }
+    });
+    refresh();
+    close.focus();
 }
 
 window.handleExchangeSharePlaylist = handleExchangeSharePlaylist;

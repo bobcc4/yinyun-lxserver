@@ -68,7 +68,7 @@ const assertStorageLocation = (username: string, location?: string) => {
 
 const isReadOnlyExternalLocation = (location?: string) => isExternalLocation(location)
 
-let currentCacheLocation = CACHE_ROOTS.ROOT
+const currentCacheLocation = CACHE_ROOTS.ROOT
 const CACHE_LIST_SYNC_TTL = 30 * 1000
 const AUDIO_DOWNLOAD_MAX_REDIRECTS = 5
 const AUDIO_DOWNLOAD_TIMEOUT = 30 * 1000
@@ -1639,14 +1639,15 @@ export const getCacheCover = async (filename: string, username?: string, preferr
 /**
  * Remove a specific cache file
  */
-export const removeCacheFile = (filename: string, username?: string, requestedFolder?: CacheFolder): RemoveCacheFileResult => {
+export const removeCacheFile = (filename: string, username?: string, requestedFolder?: CacheFolder, location?: string): RemoveCacheFileResult => {
     if (!filename || typeof filename !== 'string') throw new Error('Invalid filename')
     if (requestedFolder && requestedFolder !== 'cache' && requestedFolder !== 'music') throw new Error('Invalid folder')
+    if (location && location !== CACHE_ROOTS.ROOT && location !== CACHE_ROOTS.DATA) throw new Error('Invalid storage location')
 
     const normalizedUsername = normalizeCacheUsername(username)
     const candidateFolders: CacheFolder[] = requestedFolder ? [requestedFolder] : ['cache', 'music']
     const matches = candidateFolders.map(folder => {
-        const dir = getCacheDir(normalizedUsername, folder === 'music')
+        const dir = getCacheDir(normalizedUsername, folder === 'music', location)
         const filePath = resolveCacheRelativePath(dir, filename)
         return filePath && fs.existsSync(filePath) ? { folder, dir, filePath } : null
     }).filter((entry): entry is { folder: CacheFolder; dir: string; filePath: string } => entry !== null)
@@ -1659,7 +1660,7 @@ export const removeCacheFile = (filename: string, username?: string, requestedFo
     if (matches.length === 0) return { deleted: false }
 
     const { folder, dir, filePath } = matches[0]
-    const item = indexManager.getAll(normalizedUsername, folder).find(i => i.filename === filename)
+    const item = indexManager.getAll(normalizedUsername, folder, location).find(i => i.filename === filename)
     let coverCacheHash = ''
     try {
         coverCacheHash = getCoverCacheHash(filename, fs.statSync(filePath))
@@ -1694,12 +1695,12 @@ export const removeCacheFile = (filename: string, username?: string, requestedFo
         }
     }
 
-    if (item) indexManager.remove(normalizedUsername, item.id, folder, item.quality)
+    if (item) indexManager.remove(normalizedUsername, item.id, folder, item.quality, location)
 
     // Cover cache is shared by filename. Preserve it while the same relative file
     // still exists in the other root so deleting cache does not affect downloads.
     const otherFolder: CacheFolder = folder === 'cache' ? 'music' : 'cache'
-    const otherDir = getCacheDir(normalizedUsername, otherFolder === 'music')
+    const otherDir = getCacheDir(normalizedUsername, otherFolder === 'music', location)
     const otherPath = resolveCacheRelativePath(otherDir, filename)
     const hasCounterpart = !!otherPath && fs.existsSync(otherPath)
     if (!hasCounterpart) {
@@ -1716,13 +1717,6 @@ export const removeCacheFile = (filename: string, username?: string, requestedFo
     }
 
     return { deleted: true, folder }
-}
-
-export const setCacheLocation = (location: string) => {
-    if (location === CACHE_ROOTS.DATA || location === CACHE_ROOTS.ROOT) {
-        currentCacheLocation = location
-        console.log(`[FileCache] Base cache location set to: ${location}`)
-    }
 }
 
 export const getCacheLocation = () => currentCacheLocation
@@ -2626,18 +2620,6 @@ export const getCacheFilePath = (
     location?: string,
 ) => resolveMusicPath(getCacheDir(username, isOnlyDownload, location), filename)
 
-const normalizeMusicSubPath = (root: string, subPath: unknown, allowRoot: boolean) => {
-    if (typeof subPath !== 'string' || subPath.includes('\0')) {
-        throw new Error('Invalid music subdirectory')
-    }
-    const target = resolveMusicPath(root, subPath || '.')
-    const normalizedRoot = path.resolve(root)
-    if (!allowRoot && target === normalizedRoot) {
-        throw new Error('Music subdirectory is required')
-    }
-    return path.relative(normalizedRoot, target).replace(/\\/g, '/')
-}
-
 const getAvailableRemasterTarget = (
     root: string,
     subPath: string,
@@ -3276,208 +3258,5 @@ export const switchFolder = async (filenames: string[], username: string | undef
         }
     }
 
-    return { successCount, failCount }
-}
-
-export const switchBaseLocation = async (filenames: string[], username: string | undefined) => {
-    const normalizedUsername = normalizeCacheUsername(username)
-    let successCount = 0
-    let failCount = 0
-    const sourceLoc = currentCacheLocation
-    const targetLoc = sourceLoc === CACHE_ROOTS.DATA ? CACHE_ROOTS.ROOT : CACHE_ROOTS.DATA
-
-    const folders: Array<'cache' | 'music'> = ['cache', 'music']
-
-    // Helper to get dir for a specific location
-    const getLocalDir = (folder: string, loc: string) => {
-        const folderName = folder === 'music' ? 'music' : 'cache'
-        const base = loc === CACHE_ROOTS.DATA ? global.lx.dataPath : process.cwd()
-        const userDir = normalizeCacheUsername(username)
-        return path.join(base, folderName, userDir)
-    }
-
-    for (const filename of filenames) {
-        let sourceFolder: 'cache' | 'music' | null = null
-        let item: CacheItem | null = null
-
-        // Find folder in SOURCE location
-        for (const folder of folders) {
-            const items = indexManager.getAll(normalizedUsername, folder, sourceLoc)
-            const found = items.find(i => i.filename === filename)
-            if (found) {
-                sourceFolder = folder
-                item = found
-                break
-            }
-        }
-
-        if (!sourceFolder || !item) {
-            failCount++
-            continue
-        }
-
-        const sourceDir = getLocalDir(sourceFolder, sourceLoc)
-        const targetDir = getLocalDir(sourceFolder, targetLoc)
-
-        const sourcePath = path.join(sourceDir, filename)
-        const targetPath = path.join(targetDir, filename)
-
-        try {
-            if (fs.existsSync(sourcePath)) {
-                const targetPathDir = path.dirname(targetPath)
-                if (!fs.existsSync(targetPathDir)) fs.mkdirSync(targetPathDir, { recursive: true })
-
-                // Check collision in target location
-                if (fs.existsSync(targetPath)) {
-                    console.log(`[FileCache] Base move conflict: ${filename} already exists at ${targetLoc}, skipping.`)
-                    failCount++
-                    continue
-                }
-
-                // Move audio file
-                safeRenameSync(sourcePath, targetPath)
-
-                // Move lyrics
-                if (item.lyricFilename) {
-                    const sourceLrcPath = path.join(sourceDir, item.lyricFilename)
-                    const targetLrcPath = path.join(targetDir, item.lyricFilename)
-                    const targetLrcDir = path.dirname(targetLrcPath)
-                    if (fs.existsSync(sourceLrcPath)) {
-                        if (!fs.existsSync(targetLrcDir)) fs.mkdirSync(targetLrcDir, { recursive: true })
-                        if (fs.existsSync(targetLrcPath)) fs.unlinkSync(targetLrcPath)
-                        safeRenameSync(sourceLrcPath, targetLrcPath)
-                    }
-                }
-
-                // Update Indices
-                indexManager.remove(normalizedUsername, item.id, sourceFolder, item.quality, sourceLoc)
-                // item is now in the other location's index
-                indexManager.update(normalizedUsername, item, sourceFolder, targetLoc)
-
-                successCount++
-            } else {
-                failCount++
-            }
-        } catch (e) {
-            console.error(`[FileCache] Failed to move ${filename} from ${sourceLoc} to ${targetLoc}:`, e)
-            failCount++
-        }
-    }
-
-    return { successCount, failCount, targetLoc }
-}
-
-/**
- * [New] Get all subdirectories in the music/cache folders
- */
-export const getSubDirectories = (username: string | undefined, folder: 'cache' | 'music') => {
-    const normalizedUsername = normalizeCacheUsername(username)
-    const root = getCacheDir(normalizedUsername, folder === 'music')
-    if (!fs.existsSync(root)) return []
-
-    const dirs = new Set<string>()
-
-    // 1. Get from index
-    const items = indexManager.getAll(normalizedUsername, folder)
-    items.forEach(item => { if (item.subPath) dirs.add(item.subPath) })
-
-    // 2. Scan physical tree (to include empty folders)
-    const scanDirs = (dirPath: string, base: string) => {
-        if (!fs.existsSync(dirPath)) return
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-        for (const entry of entries) {
-            if (entry.isDirectory()) {
-                const fullPath = path.join(dirPath, entry.name)
-                dirs.add(path.relative(base, fullPath).replace(/\\/g, '/'))
-                scanDirs(fullPath, base)
-            }
-        }
-    }
-    scanDirs(root, root)
-
-    return Array.from(dirs).sort()
-}
-
-/**
- * [New] Create a subdirectory
- */
-export const createSubDirectory = (username: string | undefined, folder: 'cache' | 'music', subPath: string) => {
-    const normalizedUsername = normalizeCacheUsername(username)
-    const root = getCacheDir(normalizedUsername, folder === 'music')
-    const normalizedSubPath = normalizeMusicSubPath(root, subPath, false)
-    const target = resolveMusicPath(root, normalizedSubPath)
-    if (!fs.existsSync(target)) {
-        fs.mkdirSync(target, { recursive: true })
-        return true
-    }
-    return false
-}
-
-/**
- * [New] Categorize multiple files into a subdirectory
- */
-export const categorizeFiles = async (filenames: string[], targetSubPath: string, username: string | undefined) => {
-    const normalizedUsername = normalizeCacheUsername(username)
-    const folder = 'music' // Categorization is primarily for music folder
-    const root = getCacheDir(normalizedUsername, true)
-    const normalizedTargetSubPath = normalizeMusicSubPath(root, targetSubPath, true)
-    const targetDir = resolveMusicPath(root, normalizedTargetSubPath || '.')
-
-    if (normalizedTargetSubPath && !fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true })
-    }
-
-    const allItems = indexManager.getAll(normalizedUsername, folder)
-    let successCount = 0
-    let failCount = 0
-
-    for (const filename of filenames) {
-        const item = allItems.find(i => i.filename === filename)
-        if (!item) {
-            console.warn(`[FileCache] Categorize: item not found for ${filename}`)
-            failCount++;
-            continue
-        }
-
-        const oldPath = resolveMusicPath(root, filename)
-        const newFilename = normalizedTargetSubPath ? path.join(normalizedTargetSubPath, path.basename(filename)).replace(/\\/g, '/') : path.basename(filename)
-        const newPath = resolveMusicPath(root, newFilename)
-
-        if (oldPath === newPath) { successCount++; continue }
-
-        try {
-            // Physically move file
-            if (fs.existsSync(oldPath)) {
-                safeRenameSync(oldPath, newPath)
-
-                // Move lyrics if exist
-                const ext = path.extname(filename)
-                const oldLrcPath = oldPath.substring(0, oldPath.length - ext.length) + '.lrc'
-                const newLrcPath = newPath.substring(0, newPath.length - ext.length) + '.lrc'
-                if (fs.existsSync(oldLrcPath)) {
-                    safeRenameSync(oldLrcPath, newLrcPath)
-                }
-
-                // Update index
-                item.filename = newFilename
-                item.subPath = normalizedTargetSubPath
-                if (item.lyricFilename) {
-                    const musicExt = path.extname(newFilename)
-                    const lrcExt = path.extname(item.lyricFilename) || '.lrc'
-                    item.lyricFilename = newFilename.substring(0, newFilename.length - musicExt.length) + lrcExt
-                }
-            } else {
-                failCount++
-                continue
-            }
-
-            successCount++
-        } catch (e: any) {
-            console.error('[FileCache] Categorize failed for ' + filename + ':', e)
-            failCount++
-        }
-    }
-
-    indexManager.save(normalizedUsername, folder)
     return { successCount, failCount }
 }

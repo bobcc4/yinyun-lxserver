@@ -944,45 +944,6 @@ aside {
     box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.4);
 }
 
-/* 子目录选择按钮适配 */
-.subpath-btn-active {
-    border-color: var(--c-500) !important;
-    background-color: var(--c-50) !important;
-}
-:root[data-appearance="dark"] .subpath-btn-active,
-.dark .subpath-btn-active {
-    background-color: color-mix(in srgb, var(--c-500) 15%, transparent) !important;
-}
-.subpath-btn-active i,
-.subpath-btn-active span {
-    color: var(--c-600) !important;
-}
-:root[data-appearance="dark"] .subpath-btn-active i,
-:root[data-appearance="dark"] .subpath-btn-active span,
-.dark .subpath-btn-active i,
-.dark .subpath-btn-active span {
-    color: var(--c-300) !important;
-}
-
-.subpath-btn-inactive {
-    border-color: var(--border-main) !important;
-    background-color: transparent !important;
-}
-.subpath-btn-inactive:hover {
-    border-color: var(--c-500) !important;
-    background-color: color-mix(in srgb, var(--c-500) 8%, var(--bg-panel)) !important;
-}
-.subpath-btn-inactive i {
-    color: var(--text-muted) !important;
-}
-.subpath-btn-inactive span {
-    color: var(--text-main) !important;
-}
-.subpath-btn-inactive:hover i,
-.subpath-btn-inactive:hover span {
-    color: var(--c-500) !important;
-}
-
 /* ── 搜索框布尔运算符标签 (方框浅色字符) ── */
 .lm-op-tag {
     display: inline-flex;
@@ -1051,7 +1012,11 @@ aside {
     padding: 4px 12px;
 }
 .playlist-sidebar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.playlist-sidebar-count { font-variant-numeric: tabular-nums; opacity: .65; }
+.playlist-sidebar-count { font-variant-numeric: tabular-nums; text-align: right; opacity: .65; }
+.playlist-sidebar-name.dynamic-marquee { display: block; min-width: 0; }
+@media (prefers-reduced-motion: reduce) {
+    .playlist-sidebar-name .animate-marquee { animation: none; }
+}
 .playlist-sidebar-icon { position: relative; width: 18px; text-align: center; }
 .playlist-more { width: 26px; height: 28px; border-radius: 4px; }
 .playlist-more:hover, .playlist-more:focus-visible { color: var(--c-600, #059669); background: var(--bg-main); }

@@ -986,20 +986,6 @@
                                     class="text-[9px] md:text-[10px] t-text-muted opacity-60 whitespace-nowrap">共 0
                                     首</span>
                             </div>
-                            <div id="lm-storage-controls"
-                                class="flex items-center gap-0.5 md:gap-1 bg-gray-100/50 dark:bg-gray-700/30 p-0.5 rounded-lg border t-border-main scale-90 md:scale-100 origin-left order-3 md:order-2">
-                                <select id="lm-location-select" onchange="window.LocalMusicManager.changeLocation()"
-                                    class="lm-select !w-16 md:!w-20 !py-0.5 !text-[9px] md:!text-[10px] !px-1">
-                                    <option value="root">根目录</option>
-                                    <option value="data">数据目录</option>
-                                </select>
-                                <div class="h-3 w-[1px] bg-gray-300 dark:bg-gray-600"></div>
-                                <button id="lm-subpath-btn" onclick="window.LocalMusicManager.openSubPathModal()"
-                                    class="text-[9px] md:text-[10px] t-text-main hover:text-[var(--c-500)] disabled:opacity-30 flex items-center gap-1 px-1">
-                                    <i class="fas fa-folder text-[9px] md:text-[10px]"></i>
-                                    <span id="lm-subpath-text" class="max-w-[40px] md:max-w-[60px] truncate">全部</span>
-                                </button>
-                            </div>
                         </div>
 
                         <!-- Desktop Search & Actions -->
@@ -1279,11 +1265,6 @@
                                         title="将歌词嵌入音频文件 USLT 标签（有 .lrc 文件直接使用，否则从网络获取）">
                                         <i class="fas fa-file-audio"></i>嵌入歌词
                                     </button>
-                                    <button data-lm-local-only="true" id="lm-batch-categorize-btn"
-                                        onclick="window.LocalMusicManager.openCategorizeModal()"
-                                        class="text-[11px] md:text-xs px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5 hidden">
-                                        <i class="fas fa-folder-open"></i>分类
-                                    </button>
                                     <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchUpdateMetadata()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-tags"></i>补全元信息
@@ -1291,10 +1272,6 @@
                                     <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchSwitchFolder()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
                                         <i class="fas fa-exchange-alt"></i>移动目录
-                                    </button>
-                                    <button data-lm-local-only="true" onclick="window.LocalMusicManager.batchSwitchBaseLocation()"
-                                        class="text-[11px] md:text-xs px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
-                                        <i class="fas fa-cloud-upload-alt"></i>云端同步
                                     </button>
                                     <button onclick="window.LocalMusicManager.batchDownloadToDevice()"
                                         class="text-[11px] md:text-xs px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-sm transition-all font-medium whitespace-nowrap flex items-center gap-1.5">
@@ -1697,7 +1674,7 @@
                                         </button>
                                         <button type="button" onclick="openPlaylistExchangeJsonImport()"
                                             class="py-2.5 t-bg-main border t-border-main rounded-xl text-sm font-medium t-text-main hover:text-emerald-500 hover:border-emerald-400 transition-all flex items-center justify-center gap-2">
-                                            <i class="fas fa-file-import"></i> 导入 JSON
+                                            <i class="fas fa-file-import"></i> 导入歌单文件
                                         </button>
                                     </div>
                                 </div>
@@ -1990,26 +1967,8 @@
                                         </div>
                                     </div>
 
-                                    <!-- Cache Location Setting -->
+                                    <!-- Cache Naming Setting -->
                                     <div class="pb-3 border-b t-border-main">
-                                        <div class="flex items-center justify-between mb-2">
-                                            <div>
-                                                <div class="text-sm font-bold t-text-main flex items-center">
-                                                    缓存歌曲位置
-                                                    <span class="setting-tooltip-trigger ml-1">
-                                                        <i class="fas fa-question-circle"></i>
-                                                        <span class="setting-tooltip-content">设置服务器端存储缓存文件的具体路径。</span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <select id="setting-server-cache-location"
-                                            onchange="updateSetting('serverCacheLocation', this.value); updateServerCacheConfig(this.value)"
-                                            class="lm-select !w-full !py-2.5">
-                                            <option value="data">DATA_PATH (WebDAV同步)</option>
-                                            <option value="root">运行目录 (仅本地)</option>
-                                        </select>
-
                                         <div class="mt-4 mb-2 flex items-center justify-between">
                                             <div class="text-sm font-bold t-text-main flex items-center">
                                                 歌曲命名方式
@@ -2021,7 +1980,7 @@
                                             </div>
                                         </div>
                                         <select id="setting-server-cache-naming"
-                                            onchange="updateSetting('serverCacheNamingPattern', this.value); updateServerCacheConfig(null, this.value)"
+                                            onchange="updateSetting('serverCacheNamingPattern', this.value); updateServerCacheConfig(this.value)"
                                             class="lm-select !w-full !py-2.5">
                                             <option value="standard">标准 (Name_-_Singer_-_Source_-_ID_-_Quality)
                                             </option>
@@ -3712,41 +3671,6 @@
                     <!-- Playlists will be injected here as buttons -->
                 </div>
 
-            </div>
-        </div>
-    </div>
-
-    <!-- SubPath Selection Modal -->
-    <div id="subpath-select-modal"
-        class="fixed inset-0 bg-black/60 z-[70] hidden flex items-center justify-center backdrop-blur-sm transition-opacity duration-300">
-        <div class="t-bg-panel rounded-xl w-full max-w-2xl flex flex-col shadow-2xl transform transition-transform duration-300 scale-95 opacity-0 overflow-hidden"
-            id="subpath-select-modal-content">
-            <!-- Header -->
-            <div class="p-4 border-b border-emerald-50 flex justify-between items-center bg-emerald-50/30">
-                <div class="flex-1 text-center">
-                    <h3 class="t-text-main font-bold">选择子目录</h3>
-                </div>
-                <button onclick="window.LocalMusicManager.closeSubPathModal()"
-                    class="absolute right-4 t-text-muted hover:text-emerald-500 transition-colors">
-                    <i class="fas fa-times text-lg"></i>
-                </button>
-            </div>
-
-            <!-- Grid List -->
-            <div class="p-6 t-bg-panel max-h-[60vh] overflow-y-auto custom-scrollbar">
-                <div id="subpath-select-list" class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <!-- Folders injected here -->
-                </div>
-            </div>
-
-            <!-- Footer for New Folder -->
-            <div class="p-4 border-t t-border-main bg-gray-50/50 dark:bg-gray-800/30 flex gap-2">
-                <input type="text" id="new-subfolder-input" placeholder="新文件夹名称..."
-                    class="flex-1 bg-white dark:bg-gray-900 border t-border-main rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/50">
-                <button onclick="window.LocalMusicManager.createSubFolder()"
-                    class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-sm transition-all whitespace-nowrap">
-                    创建文件夹
-                </button>
             </div>
         </div>
     </div>

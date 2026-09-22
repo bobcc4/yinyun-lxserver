@@ -26,8 +26,6 @@ window.LocalMusicManager = {
     currentManualResults: [],    // 搜索回来的结果缓存
     currentManualPage: 1,        // 当前搜索页码
     isManualSearching: false,    // 全局锁，防止滚动触发多次加载
-    selectedSubPath: '',         // [New] 当前选中的子目录
-    subPathModalMode: 'filter',  // [New] 'filter' | 'categorize'
     cacheKey: 'lx_lm_filters',   // [New] base localStorage key
     enableReMapping: false,
     listEventsBound: false,
@@ -723,8 +721,6 @@ window.LocalMusicManager = {
 
         const title = document.getElementById('lm-view-title');
         if (title) title.textContent = this.externalOnly ? '外部音乐' : '本地音乐';
-        const storageControls = document.getElementById('lm-storage-controls');
-        if (storageControls) storageControls.style.display = this.externalOnly ? 'none' : '';
         const folderFilter = document.getElementById('lm-folder-filter-control');
         if (folderFilter) folderFilter.style.display = this.externalOnly ? 'none' : '';
         document.querySelectorAll('[data-lm-local-only="true"]').forEach(element => {
@@ -732,7 +728,6 @@ window.LocalMusicManager = {
         });
         if (this.externalOnly) {
             this.filterFolder = 'music';
-            this.selectedSubPath = '';
             this.enableReMapping = false;
         }
         this.updateBatchUI();
@@ -746,8 +741,7 @@ window.LocalMusicManager = {
             filterStatus: Array.from(this.filterStatus),
             filterSource: Array.from(this.filterSource),
             sortBy: this.sortBy,
-            sortOrder: this.sortOrder,
-            selectedSubPath: this.selectedSubPath
+            sortOrder: this.sortOrder
         };
         localStorage.setItem(this.getFilterStorageKey(), JSON.stringify(filters));
     },
@@ -757,6 +751,11 @@ window.LocalMusicManager = {
             const cached = localStorage.getItem(this.getFilterStorageKey());
             if (cached) {
                 const filters = JSON.parse(cached);
+                // Folder filtering has been removed; keep the other saved filters.
+                if (Object.prototype.hasOwnProperty.call(filters, 'selectedSubPath')) {
+                    delete filters.selectedSubPath;
+                    localStorage.setItem(this.getFilterStorageKey(), JSON.stringify(filters));
+                }
                 this.searchKeyword = filters.searchKeyword || '';
                 this.filterFolder = filters.filterFolder || 'all';
                 const toSet = (v) => {
@@ -769,7 +768,6 @@ window.LocalMusicManager = {
                 this.filterSource = toSet(filters.filterSource);
                 this.sortBy = filters.sortBy || 'mtime';
                 this.sortOrder = filters.sortOrder || 'desc';
-                this.selectedSubPath = filters.selectedSubPath || '';
 
                 // Update UI elements
                 if (document.getElementById('lm-search-input')) this.setRichInputValue(document.getElementById('lm-search-input'), this.searchKeyword);
@@ -789,13 +787,6 @@ window.LocalMusicManager = {
                 this._syncTagUI('lm-source-tags', this.filterSource);
                 this._syncTagUI('lm-status-tags', this.filterStatus);
 
-                const subPathText = document.getElementById('lm-subpath-text');
-                if (subPathText) {
-                    let displayText = this.selectedSubPath;
-                    if (this.selectedSubPath === '') displayText = '全部';
-                    else if (this.selectedSubPath === '__ROOT__') displayText = '根目录';
-                    subPathText.innerText = displayText;
-                }
             }
         } catch (e) {
             console.error('Failed to load cached filters:', e);
@@ -855,9 +846,7 @@ window.LocalMusicManager = {
 
     init() {
         // Initialization can run when the tab is clicked, or immediately.
-        // Try reading global cache location to sync the selector.
         this.setViewMode('local');
-        this.syncLocationSelector();
         this.resetFilters(false);
         this.bindListEvents();
         this.bindRichCompositionEvents();
@@ -870,7 +859,6 @@ window.LocalMusicManager = {
             origSwitchTab(tabId);
             if (tabId === 'localmusic' || tabId === 'externalmusic') {
                 window.LocalMusicManager.setViewMode(tabId === 'externalmusic' ? 'external' : 'local');
-                window.LocalMusicManager.syncLocationSelector();
                 window.LocalMusicManager.resetFilters();
                 window.LocalMusicManager.fetchData(true); // silent fetch
             } else {
@@ -880,45 +868,6 @@ window.LocalMusicManager = {
                 }
             }
         };
-    },
-
-    syncLocationSelector() {
-        // Let's assume 'data' or 'root' based on the config. 
-        // We might not have async config sync in UI immediately, but we can read from global.
-        // Fallback: we fetch stats or just assume what we get.
-        // Setting it via API is the most robust way.
-    },
-
-    async changeLocation() {
-        if (typeof window.isUserLoggedIn !== 'function' || !window.isUserLoggedIn()) {
-            this.showNoPermissionState();
-            if (typeof showError === 'function') showError('\u8bf7\u5148\u767b\u5f55\u540c\u6b65\u8d26\u6237');
-            return;
-        }
-
-        const el = document.getElementById('lm-location-select');
-        const val = el.value;
-        try {
-            const requestChange = () => fetch('/api/v1/player/music/cache/config', {
-                method: 'POST',
-                headers: window.getUserAuthHeaders ? window.getUserAuthHeaders() : {},
-                body: JSON.stringify({ location: val })
-            });
-            let response = await requestChange();
-            if (response.status === 401 && typeof window.ensureUserAuthToken === 'function') {
-                const refreshed = await window.ensureUserAuthToken({ force: true });
-                if (refreshed) response = await requestChange();
-            }
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            // Reset subpath when changing location
-            this.selectedSubPath = '';
-            const subPathText = document.getElementById('lm-subpath-text');
-            if (subPathText) subPathText.innerText = '全部';
-
-            this.refresh();
-        } catch (e) {
-            if (typeof showError === 'function') showError('切换目录失败');
-        }
     },
 
     changeFolder() {
@@ -1039,10 +988,6 @@ window.LocalMusicManager = {
         this._syncTagUI('lm-source-tags', this.filterSource);
         this._syncTagUI('lm-status-tags', this.filterStatus);
 
-        this.selectedSubPath = '';
-        const subPathText = document.getElementById('lm-subpath-text');
-        if (subPathText) subPathText.innerText = '\u5168\u90e8';
-
         localStorage.removeItem(this.getFilterStorageKey());
         const activeDot = document.getElementById('lm-filter-active-dot');
         if (activeDot) activeDot.classList.add('hidden');
@@ -1124,8 +1069,6 @@ window.LocalMusicManager = {
                     this.renderRemasterSelection();
                 }
 
-                // Attempt to auto-sync location switch UI if not selected manually
-                // (Only works if we know somehow what the backend uses, but we can ignore for now)
             } else {
                 throw new Error(result.message || 'Failed to fetch local music');
             }
@@ -1226,28 +1169,8 @@ window.LocalMusicManager = {
             if (!searchMatcher(searchValues)) return false;
             if (!quickSearchMatcher(searchValues)) return false;
 
-            // SubPath check
-            if (this.selectedSubPath !== '') {
-                const target = this.selectedSubPath === '__ROOT__' ? '' : this.selectedSubPath;
-                if ((item.subPath || '') !== target) return false;
-            }
-
             return true;
         });
-
-        // 3.0.1 Update SubPath Button State
-        const subPathBtn = document.getElementById('lm-subpath-btn');
-        if (subPathBtn) {
-            if (this.filterFolder !== 'music') {
-                if (this.selectedSubPath !== '') {
-                    this.selectedSubPath = '';
-                    const subPathText = document.getElementById('lm-subpath-text');
-                    if (subPathText) subPathText.innerText = '全部';
-                    // Re-filter if we just reset
-                    return setTimeout(() => window.LocalMusicManager.applyFilters(), 0);
-                }
-            }
-        }
 
         // 3.1 Apply Sorting
         current.sort((a, b) => {
@@ -1687,12 +1610,6 @@ window.LocalMusicManager = {
                 tb.classList.remove('hidden');
                 tb.classList.add('flex');
 
-                // [New] Show categorize button only for music folder
-                const catBtn = document.getElementById('lm-batch-categorize-btn');
-                if (catBtn) {
-                    if (this.filterFolder === 'music') catBtn.classList.remove('hidden');
-                    else catBtn.classList.add('hidden');
-                }
             } else {
                 tb.classList.add('hidden');
                 tb.classList.remove('flex');
@@ -2172,49 +2089,6 @@ window.LocalMusicManager = {
             }
         } catch (e) {
             if (typeof showError === 'function') showError('移动失败: ' + e.message);
-        }
-    },
-
-    async batchSwitchBaseLocation() {
-        if (this.externalOnly) {
-            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能转移文件');
-            return;
-        }
-        const targetFilenames = this.getSelectedFilenames();
-        if (targetFilenames.length === 0) {
-            if (typeof showError === 'function') showError('请先选择要转移的文件');
-            return;
-        }
-
-        const el = document.getElementById('lm-location-select');
-        const currentLocName = el ? (el.value === 'data' ? '云端(Data)' : '本地(Root)') : '当前目录';
-        const targetLocName = el ? (el.value === 'data' ? '本地(Root)' : '云端(Data)') : '另一目录';
-
-        if (typeof showSelect === 'function') {
-            if (!(await showSelect('云端同步', `确定要将选中的 ${targetFilenames.length} 个文件从 ${currentLocName} 转移到 ${targetLocName} 吗?`))) return;
-        }
-
-        try {
-            if (typeof showInfo === 'function') showInfo('正在跨目录转移文件，请稍候...');
-            const res = await fetch('/api/v1/player/music/cache/switch-base', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(window.getUserAuthHeaders ? window.getUserAuthHeaders() : {})
-                },
-                body: JSON.stringify({ filenames: targetFilenames })
-            });
-
-            const result = await res.json();
-            if (result.success) {
-                if (typeof showInfo === 'function') showInfo(`跨目录转移完成。成功 ${result.successCount} 项，失败 ${result.failCount} 项`);
-                this.deselectAll();
-                this.refresh();
-            } else {
-                throw new Error(result.message || 'Server returned error');
-            }
-        } catch (e) {
-            if (typeof showError === 'function') showError('转移失败: ' + e.message);
         }
     },
 
@@ -2765,153 +2639,6 @@ window.LocalMusicManager = {
         return parseInt(str) || 0;
     },
 
-    async openSubPathModal(mode = 'filter') {
-        if (this.filterFolder !== 'music') {
-            if (typeof showInfo === 'function') showInfo('请先在筛选中选择“下载”目录');
-            return;
-        }
-        this.subPathModalMode = mode;
-        const modal = document.getElementById('subpath-select-modal');
-        const content = document.getElementById('subpath-select-modal-content');
-        if (!modal || !content) return;
-
-        // Update modal title based on mode
-        const title = modal.querySelector('h3');
-        if (title) title.innerText = mode === 'categorize' ? '移动到分类' : '选择子目录';
-
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        setTimeout(() => {
-            content.classList.remove('scale-95', 'opacity-0');
-            content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-
-        try {
-            const res = await fetch(`/api/v1/player/music/cache/subdirs?folder=music`, {
-                headers: window.getUserAuthHeaders ? window.getUserAuthHeaders() : {}
-            });
-            const { data } = await res.json();
-            this.renderSubPathList(data || []);
-        } catch (e) {
-            console.error('Failed to fetch subdirs:', e);
-            if (typeof showError === 'function') showError('获取子目录失败');
-        }
-    },
-
-    closeSubPathModal() {
-        const modal = document.getElementById('subpath-select-modal');
-        const content = document.getElementById('subpath-select-modal-content');
-        if (!modal || !content) return;
-
-        content.classList.remove('scale-100', 'opacity-100');
-        content.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-        }, 300);
-    },
-
-    renderSubPathList(dirs) {
-        const list = document.getElementById('subpath-select-list');
-        if (!list) return;
-
-        let html = '';
-
-        if (this.subPathModalMode === 'filter') {
-            // [All Directories] Option
-            html += `
-                <button onclick="window.LocalMusicManager.selectSubPath('')" class="p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group ${this.selectedSubPath === '' ? 'subpath-btn-active' : 'subpath-btn-inactive'}">
-                    <i class="fas fa-layer-group text-xl"></i>
-                    <span class="text-xs font-bold truncate w-full text-center">全部目录</span>
-                </button>
-            `;
-            // [Root Only] Option
-            html += `
-                <button onclick="window.LocalMusicManager.selectSubPath('__ROOT__')" class="p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group ${this.selectedSubPath === '__ROOT__' ? 'subpath-btn-active' : 'subpath-btn-inactive'}">
-                    <i class="fas fa-home text-xl"></i>
-                    <span class="text-xs font-bold truncate w-full text-center">根目录</span>
-                </button>
-            `;
-        } else {
-            // [Categorize to Root] Option
-            html += `
-                <button onclick="window.LocalMusicManager.selectSubPath('')" class="p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group ${this.selectedSubPath === '' ? 'subpath-btn-active' : 'subpath-btn-inactive'}">
-                    <i class="fas fa-home text-xl"></i>
-                    <span class="text-xs font-bold truncate w-full text-center">移动到根目录 (/)</span>
-                </button>
-            `;
-        }
-
-        dirs.forEach(dir => {
-            const isActive = this.selectedSubPath === dir;
-            html += `
-                <button onclick="window.LocalMusicManager.selectSubPath('${dir.replace(/'/g, "\\'")}')" class="p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 group ${isActive ? 'subpath-btn-active' : 'subpath-btn-inactive'}">
-                    <i class="fas fa-folder text-xl"></i>
-                    <span class="text-xs font-bold truncate w-full text-center" title="${dir}">${dir}</span>
-                </button>
-            `;
-        });
-
-        list.innerHTML = html;
-    },
-
-    selectSubPath(path) {
-        if (this.subPathModalMode === 'categorize') {
-            const target = path === '__ROOT__' ? '' : path;
-            this.batchCategorize(target);
-            return;
-        }
-        this.selectedSubPath = path;
-        const text = document.getElementById('lm-subpath-text');
-        let displayText = path;
-        if (path === '') displayText = '全部';
-        else if (path === '__ROOT__') displayText = '根目录';
-        if (text) text.innerText = displayText;
-        this.closeSubPathModal();
-        this.applyFilters();
-    },
-
-    async batchCategorize(targetSubPath) {
-        if (this.externalOnly) {
-            if (typeof showError === 'function') showError('外部音乐库为只读目录，不能分类文件');
-            return;
-        }
-        const filenames = this.getSelectedFilenames();
-        if (filenames.length === 0) return;
-
-        if (typeof showMsg === 'function') showMsg(`正在移动 ${filenames.length} 首歌曲到 ${targetSubPath || '根目录'}...`, 'info');
-
-        try {
-            const username = (window.currentListData && window.currentListData.username) || localStorage.getItem('lx_sync_user') || '';
-            const res = await fetch(`/api/v1/player/music/cache/categorize?user=${encodeURIComponent(username)}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(window.getUserAuthHeaders ? window.getUserAuthHeaders() : {})
-                },
-                body: JSON.stringify({ filenames, subPath: targetSubPath })
-            });
-            const data = await res.json();
-            if (data.success) {
-                if (typeof showMsg === 'function') showMsg(`成功移动 ${data.successCount} 首, 失败 ${data.failCount} 首`, 'success');
-                this.closeSubPathModal();
-                this.selectedItems.clear();
-                this.updateBatchUI();
-                // We need to reload data because filenames/paths in memory are now invalid
-                await this.fetchData(true);
-            } else {
-                if (typeof showError === 'function') showError('移动文件失败');
-            }
-        } catch (e) {
-            console.error('Categorize failed:', e);
-            if (typeof showError === 'function') showError('网络请求失败');
-        }
-    },
-
-    openCategorizeModal() {
-        this.openSubPathModal('categorize');
-    },
-
     syncRemasterVisibility() {
         const enabled = !!window.settings?.enableRemaster;
         ['lm-remaster-btn', 'lm-remaster-btn-mobile'].forEach(id => {
@@ -3377,35 +3104,6 @@ window.LocalMusicManager = {
                 </div>`;
         }).join('');
     },
-
-    async createSubFolder() {
-        const input = document.getElementById('new-subfolder-input');
-        if (!input) return;
-        const subPath = input.value.trim();
-        if (!subPath) return;
-
-        try {
-            const res = await fetch('/api/v1/player/music/cache/mkdir', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(window.getUserAuthHeaders ? window.getUserAuthHeaders() : {})
-                },
-                body: JSON.stringify({ folder: 'music', subPath })
-            });
-            const { success } = await res.json();
-            if (success) {
-                if (typeof showMsg === 'function') showMsg('文件夹创建成功', 'success');
-                input.value = '';
-                // Re-open/refresh modal
-                this.openSubPathModal();
-            } else {
-                if (typeof showError === 'function') showError('文件夹已存在或创建失败');
-            }
-        } catch (e) {
-            console.error('Failed to create subdir:', e);
-        }
-    }
 };
 
 window.toggleLmBatchMode = () => window.LocalMusicManager.toggleBatchMode();

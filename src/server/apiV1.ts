@@ -30,6 +30,7 @@ import {
 } from './apiV1Contract'
 import { normalizeLyricsResponse } from './utils/apiLyrics'
 import type { NetworkPlaylistMonitor } from './networkPlaylistMonitor'
+import { parsePlaylistFile, PLAYLIST_FILE_MAX_BYTES } from './playlistFileImport'
 import {
   createPlaylistExchange,
   createPlaylistExchangePackage,
@@ -483,6 +484,7 @@ export const apiV1OpenApi = {
     '/api/v1/playlist-shares': { post: { summary: '创建跨音云服务端分享链接' } },
     '/api/v1/playlist-shares/{token}': { get: { security: [], summary: '读取公开歌单分享包' }, delete: { summary: '撤销歌单分享链接' } },
     '/api/v1/playlist-import/preview': { post: { summary: '预览跨服务端歌单导入' } },
+    '/api/v1/playlist-import/file': { post: { summary: '解析音云 JSON 或洛雪 LXMC/JSON 歌单文件，不写入账户' } },
     '/api/v1/playlist-import': { post: { summary: '导入跨服务端歌单' } },
     '/api/v1/downloads': { get: { summary: '查询服务端下载队列' }, post: { summary: '加入服务端下载队列' } },
     '/api/v1/replacement': { get: { summary: '查询洗版任务' }, post: { summary: '启动洗版任务' } },
@@ -599,6 +601,12 @@ export const createApiV1Handler = (deps: ApiV1Dependencies) => async (
     const exchangeManageMatch = pathname.match(/^\/api\/v1\/playlist-shares\/([a-f0-9]{64})$/)
     if (exchangeManageMatch && req.method === 'DELETE') {
       success(res, revokePlaylistExchange(username, exchangeManageMatch[1]))
+      return true
+    }
+
+    if (pathname === `${API_PREFIX}/playlist-import/file` && req.method === 'POST') {
+      const body = await readJson(req, Math.ceil(PLAYLIST_FILE_MAX_BYTES / 3) * 4 + 1024)
+      success(res, await parsePlaylistFile(body))
       return true
     }
 

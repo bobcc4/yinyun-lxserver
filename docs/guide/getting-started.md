@@ -104,7 +104,7 @@ npm start
 
 ## 反向代理要点
 
-反向代理应转发完整站点根路径，并支持 Range 请求、较长的流媒体连接，同时放行 `/api/v1` 与 `/rest`。不要只把上游配置成旧 `/music` 子路径。建议保留以下请求头：
+反向代理应转发完整站点根路径，并支持 Range 请求、较长的流媒体连接，同时放行 `/api/v1` 与 `/rest`。不要只把上游配置成旧 `/music` 子路径。若使用跨服务端歌单分享，还必须放行 `/share/playlist/*` 和 `/api/v1/playlist-shares/*`，分别用于分享预览页和读取分享数据。建议保留以下请求头：
 
 ```nginx
 proxy_set_header Host $host;

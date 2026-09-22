@@ -38,6 +38,43 @@ test('does not create a lyric sidecar when no audio file exists', () => {
   assert.equal(fs.readdirSync(cacheDir).some(file => file.endsWith('.lrc')), false)
 })
 
+test('fixed default storage still discovers nested music in the legacy data location', async () => {
+  assert.equal(fileCache.getCacheLocation(), 'root')
+  assert.equal(fileCache.getCacheDir('legacy', true), path.join(root, 'music', 'legacy'))
+  assert.equal(fileCache.getCacheDir('legacy', false), path.join(root, 'cache', 'legacy'))
+  const legacyRoot = fileCache.getCacheDir('legacy', true, 'data')
+  const nested = path.join(legacyRoot, 'artist', 'album')
+  fs.mkdirSync(nested, { recursive: true })
+  const filename = path.join(nested, 'retained.wav')
+  fs.copyFileSync(path.join(previousCwd, 'public/music/assets/medias/filters/bright-hall.wav'), filename)
+  await fileCache.syncCacheIndex('legacy', ['music'], 'data')
+  const list = await fileCache.getCacheList('legacy')
+  const song = list.find(item => item.filename === 'artist/album/retained.wav')
+  assert.ok(song)
+  assert.equal(song.storageLocation, 'data')
+  assert.equal(fs.existsSync(filename), true)
+  assert.equal(fs.existsSync(path.join(root, 'music', 'legacy', 'artist', 'album', 'retained.wav')), false)
+})
+
+test('deleting a legacy-location file leaves its root-location namesake intact', async () => {
+  const filename = 'same-name.wav'
+  const rootDir = fileCache.getCacheDir('legacy-delete', true, 'root')
+  const dataDir = fileCache.getCacheDir('legacy-delete', true, 'data')
+  const sample = path.join(previousCwd, 'public/music/assets/medias/filters/bright-hall.wav')
+  for (const dir of [rootDir, dataDir]) {
+    fs.copyFileSync(sample, path.join(dir, filename))
+    fs.writeFileSync(path.join(dir, 'same-name.lrc'), '[00:01.00]Test')
+  }
+  await fileCache.syncCacheIndex('legacy-delete', ['music'], 'root')
+  await fileCache.syncCacheIndex('legacy-delete', ['music'], 'data')
+  assert.equal(fileCache.removeCacheFile(filename, 'legacy-delete', 'music', 'data').deleted, true)
+  assert.equal(fs.existsSync(path.join(dataDir, filename)), false)
+  assert.equal(fs.existsSync(path.join(dataDir, 'same-name.lrc')), false)
+  assert.equal(fs.existsSync(path.join(rootDir, filename)), true)
+  assert.equal(fs.existsSync(path.join(rootDir, 'same-name.lrc')), true)
+  assert.throws(() => fileCache.removeCacheFile(filename, 'legacy-delete', 'music', 'external:test'), /Invalid storage/)
+})
+
 test('batch metadata completion writes Album Artist into the audio tags', async () => {
   const source = path.resolve(previousCwd, 'public/music/assets/medias/filters/bright-hall.wav')
   const filename = 'metadata-batch-test.wav'

@@ -7,6 +7,44 @@ import ts from 'typescript'
 const app = fs.readFileSync('public/music/app.js', 'utf8')
 const sound = fs.readFileSync('public/music/js/sound-effects.js', 'utf8')
 
+test('sidebar marquee is remeasured only after visible width or fonts change', async () => {
+  let resize!: (entries: any[]) => void
+  let fontReady!: () => void
+  let checks = 0
+  const name = {
+    isConnected: true, clientWidth: 120, dataset: { text: 'Long playlist name' },
+    textContent: '', parentElement: {}, classList: { add: () => {}, remove: () => {} },
+  }
+  const context = vm.createContext({
+    sidebarPlaylistNameObserver: null,
+    ResizeObserver: class { constructor(cb: typeof resize) { resize = cb } observe() {} },
+    document: { fonts: { ready: new Promise<void>(r => { fontReady = r }) } },
+    applyMarqueeChecks: () => { checks++ },
+    container: { querySelectorAll: () => [name] },
+  })
+  vm.runInContext(declaration(app, 'observeSidebarPlaylistNames') + '\nobserveSidebarPlaylistNames(container)', context)
+  assert.equal(checks, 1)
+  resize([{ target: name }])
+  assert.equal(checks, 1)
+  name.clientWidth = 300
+  resize([{ target: name }])
+  assert.equal(checks, 2)
+  assert.equal(name.textContent, name.dataset.text)
+  name.clientWidth = 0
+  resize([{ target: name }])
+  assert.equal(checks, 2)
+  name.clientWidth = 120
+  resize([{ target: name }])
+  assert.equal(checks, 3)
+  fontReady()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(checks, 4)
+  name.isConnected = false
+  name.clientWidth = 200
+  resize([{ target: name }])
+  assert.equal(checks, 4)
+})
+
 for (const saved of [true, false]) {
   test('network playlist refresh only updates visible state after save: ' + saved, async () => {
     const original = { userList: [{ id: 'test', name: 'My playlist', source: 'wy', sourceListId: '123', list: [{ id: 'old' }] }] }

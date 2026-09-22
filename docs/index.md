@@ -30,7 +30,7 @@ features:
     details: Windows 加密账户快照与灾难恢复，以及音流、LMP、Feishin 等 Subsonic 客户端接入。
     link: /guide/accounts-sync
   - title: 歌单分享与音源
-    details: 音云服务端之间通过链接或 JSON 分享歌单，导入前预览匹配结果；同时支持管理员音源共享、自定义源隔离、代理与安全设置。
+    details: 音云服务端之间通过链接或 JSON 分享歌单，支持洛雪 LXMC / JSON 歌单文件预览与选择导入；同时支持管理员音源共享、自定义源隔离、代理与安全设置。
     link: /guide/sharing
   - title: 故障排查
     details: 登录、播放、下载、曲库扫描、歌词封面、Subsonic 和桌面客户端常见问题。
@@ -50,7 +50,10 @@ features:
 
 建议在 NAS 或服务器上通过 Docker 部署音云服务端，再使用音流、箭头音乐等支持 Subsonic 的第三方客户端连接。客户端填写服务端 `IP:端口`，并使用音云用户名和密码登录即可。
 
-使用 Lucky 等工具进行反向代理时，请确保放行 `/rest/*` 路径。
+使用 Lucky 等工具进行反向代理时，请将上游指向服务端根地址（例如 `http://192.168.10.108:9527`），不要将上游配置成旧的 `/music` 子路径。除 `/rest/*` 外，如果使用跨服务端歌单分享，还必须放行：
+
+- `/share/playlist/*`：分享链接预览页。
+- `/api/v1/playlist-shares/*`：跨服务端读取分享数据。
 
 **交流群：** [点击加入音云 issue 反馈群](https://qm.qq.com/q/MW7cns1eMe)
 

@@ -2599,7 +2599,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
       }
 
       // [新增] File Cache APIs
-      // 1. Config Cache Location
+      // 1. Configure file naming; storage roots are not switchable.
       if (pathname === '/api/v1/player/music/cache/config' && req.method === 'POST') {
         const username = getCacheRequestUsername(req)
         if (!username) {
@@ -2613,11 +2613,10 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             const { location, namingPattern } = JSON.parse(body)
             let updated = false
 
-            if (location) {
-              if (location !== fileCache.getCacheLocation()) {
-                fileCache.setCacheLocation(location)
-                updated = true
-              }
+            if (location !== undefined) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ success: false, message: '存储位置切换已移除，请刷新播放器后重试' }))
+              return
             }
 
             if (namingPattern) {
@@ -2658,75 +2657,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: false, message: 'Sync failed: ' + (e as any).message }))
         }
-        return
-      }
-
-      // 1.1-B Get Subdirectories
-      if (pathname === '/api/v1/player/music/cache/subdirs' && req.method === 'GET') {
-        const username = getCacheRequestUsername(req)
-        if (!username) {
-          res.writeHead(401, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
-          return
-        }
-        const folder = (urlObj.searchParams.get('folder') as 'cache' | 'music') || 'music'
-        const subdirs = fileCache.getSubDirectories(username, folder)
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ success: true, data: subdirs }))
-        return
-      }
-
-      // 1.1-C Create Subdirectory
-      if (pathname === '/api/v1/player/music/cache/mkdir' && req.method === 'POST') {
-        const username = getCacheRequestUsername(req)
-        if (!username) {
-          res.writeHead(401, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
-          return
-        }
-        void readBody(req).then(body => {
-          try {
-            const { folder, subPath } = JSON.parse(body)
-            if (!folder || !subPath) {
-              res.writeHead(400)
-              res.end('Missing params')
-              return
-            }
-            const success = fileCache.createSubDirectory(username, folder, subPath)
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success }))
-          } catch (e) {
-            res.writeHead(500)
-            res.end('Error')
-          }
-        })
-        return
-      }
-
-      // 1.1-D Categorize Files
-      if (pathname === '/api/v1/player/music/cache/categorize' && req.method === 'POST') {
-        const username = getCacheRequestUsername(req)
-        if (!username) {
-          res.writeHead(401, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
-          return
-        }
-        void readBody(req).then(async body => {
-          try {
-            const { filenames, subPath } = JSON.parse(body)
-            if (!Array.isArray(filenames)) {
-              res.writeHead(400)
-              res.end('Missing params')
-              return
-            }
-            const result = await fileCache.categorizeFiles(filenames, subPath, username)
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: true, ...result }))
-          } catch (e) {
-            res.writeHead(500)
-            res.end('Error')
-          }
-        })
         return
       }
 
@@ -3232,7 +3162,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             const failures: Array<{ filename: string; folder?: fileCache.CacheFolder; message: string }> = []
             for (const item of deleteItems) {
               try {
-                const result = fileCache.removeCacheFile(item.filename, username, item.folder)
+                const result = fileCache.removeCacheFile(item.filename, username, item.folder, item.storageLocation)
                 if (result.deleted) {
                   deletedCount++
                   accessLog.info(`music file deleted user=${username} folder=${result.folder} filename=${JSON.stringify(item.filename)}`)
@@ -3279,33 +3209,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             const fileList = Array.isArray(filenames) ? filenames : [filenames]
 
             const result = await fileCache.switchFolder(fileList, username)
-
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: true, ...result }))
-          } catch (e: any) {
-            res.writeHead(400)
-            res.end(e.message)
-          }
-        })
-        return
-      }
-
-      // [New] WebDAV/Base Location switch
-      if (pathname === '/api/v1/player/music/cache/switch-base' && req.method === 'POST') {
-        const username = getCacheRequestUsername(req)
-        if (!username) {
-          res.writeHead(401)
-          res.end(JSON.stringify({ success: false, message: 'Unauthorized' }))
-          return
-        }
-
-        void readBody(req).then(async body => {
-          try {
-            const { filenames } = JSON.parse(body)
-            if (!filenames) throw new Error('Missing filenames')
-            const fileList = Array.isArray(filenames) ? filenames : [filenames]
-
-            const result = await fileCache.switchBaseLocation(fileList, username)
 
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true, ...result }))
@@ -5851,7 +5754,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
 export const startServer = async (port: number, ip: string) => {
   // Initialize file cache settings from global config
   if (global.lx.config) {
-    if (global.lx.config.serverCacheLocation) fileCache.setCacheLocation(global.lx.config.serverCacheLocation)
     global.lx.config['cache.namingPattern'] = fileCache.setNamingPattern(global.lx.config['cache.namingPattern'])
 
     // Background sync cache index for active users
