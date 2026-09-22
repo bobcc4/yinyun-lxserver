@@ -6,6 +6,30 @@ import ts from 'typescript'
 
 const app = fs.readFileSync('public/music/app.js', 'utf8')
 const sound = fs.readFileSync('public/music/js/sound-effects.js', 'utf8')
+
+for (const saved of [true, false]) {
+  test('network playlist refresh only updates visible state after save: ' + saved, async () => {
+    const original = { userList: [{ id: 'test', name: 'My playlist', source: 'wy', sourceListId: '123', list: [{ id: 'old' }] }] }
+    const messages: string[] = []
+    const context = vm.createContext({
+      currentListData: original, API_BASE: '/api/v1/player/music', console: { error: () => {} },
+      escapeHtmlText: (v: string) => v, showSelect: async () => true,
+      formatSongToLxMusicStandard: (v: any) => v,
+      fetch: async () => ({ ok: true, json: async () => ({ list: [{ id: 'new', source: 'wy' }], info: { name: 'Remote title' } }) }),
+      pushDataChange: async (_: any, options: any) => { assert.equal(options.refreshedNetworkListId, 'test'); return saved },
+      renderMyLists: () => {},
+      showToast: (_: string, message: string) => messages.push(message),
+      networkListUpdateMap: new Set(['test']), networkListErrorMap: new Map(), networkListStateRevision: 0,
+    })
+    context.window = context
+    vm.runInContext(declaration(app, 'setActiveListData') + '\n' + declaration(app, 'handleRefreshList'), context)
+    await vm.runInContext("handleRefreshList('test', null, true)", context)
+    assert.equal(context.currentListData.userList[0].list[0].id, saved ? 'new' : 'old')
+    assert.equal(context.currentListData.userList[0].name, 'My playlist')
+    assert.equal(context.networkListUpdateMap.has('test'), !saved)
+    assert.equal(messages.some(message => message === '歌单内容已同步至最新状态'), saved)
+  })
+}
 function declaration(source: string, name: string) {
   const ast = ts.createSourceFile('player.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS)
   let result = ''

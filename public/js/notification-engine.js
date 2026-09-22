@@ -340,18 +340,102 @@
     }
 
     // ================= 4. GitHub Release 检查 =================
-    async function fetchLatestRelease(isManual = false, force = false) {
+    const RELEASE_CACHE_KEY = 'yinyun_release_check_v1';
+    const RELEASE_CACHE_TTL = 6 * 60 * 60 * 1000;
+    let releaseCheckState = readReleaseCheckState();
+    let releaseRequest = null;
+
+    function validRelease(release) {
+        return release && typeof release.tag_name === 'string' && /^v?\d+\.\d+\.\d+$/.test(release.tag_name);
+    }
+
+    function readReleaseCheckState() {
         try {
-            const res = await fetch(CONFIG.LATEST_RELEASE_URL, {
-                cache: 'no-store',
-                headers: { Accept: 'application/vnd.github+json' }
-            });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            const release = await res.json();
-            const latestVersion = release.tag_name;
-            if (!latestVersion || !/^v?\d+\.\d+\.\d+/.test(latestVersion)) {
-                throw new Error('GitHub Release did not return a valid version');
+            const state = JSON.parse(localStorage.getItem(RELEASE_CACHE_KEY));
+            if (state && typeof state === 'object') return state;
+        } catch (_) { /* Storage may be unavailable in private browsing. */ }
+        return {};
+    }
+
+    function saveReleaseCheckState() {
+        try { localStorage.setItem(RELEASE_CACHE_KEY, JSON.stringify(releaseCheckState)); } catch (_) {}
+    }
+
+    function releaseCheckError(failure) {
+        const error = new Error(failure.message);
+        error.status = failure.status;
+        error.rateLimited = failure.rateLimited;
+        error.retryAt = failure.retryAt;
+        return error;
+    }
+
+    async function loadLatestRelease(refresh) {
+        // Respect GitHub's cooldown even for manual checks and across page reloads.
+        const failure = releaseCheckState.failure;
+        if (failure && failure.retryAt > Date.now()) throw releaseCheckError(failure);
+        if (!refresh && validRelease(releaseCheckState.release) &&
+            releaseCheckState.checkedAt <= Date.now() &&
+            Date.now() - releaseCheckState.checkedAt < RELEASE_CACHE_TTL) return releaseCheckState.release;
+        if (releaseRequest) return releaseRequest;
+        releaseRequest = (async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
+            try {
+                const res = await fetch(CONFIG.LATEST_RELEASE_URL, {
+                    cache: 'no-store', signal: controller.signal,
+                    headers: { Accept: 'application/vnd.github+json' }
+                });
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    const rateLimited = res.status === 429 || (res.status === 403 &&
+                        (res.headers.get('x-ratelimit-remaining') === '0' ||
+                            /rate limit|abuse detection/i.test(body.message || '')));
+                    const retryAfter = res.headers.get('retry-after');
+                    const retryAt = retryAfter
+                        ? (/^\d+$/.test(retryAfter) ? Date.now() + Number(retryAfter) * 1000 : Date.parse(retryAfter))
+                        : Number(res.headers.get('x-ratelimit-reset')) * 1000;
+                    const error = new Error(`GitHub Release HTTP ${res.status}`);
+                    error.status = res.status;
+                    error.rateLimited = rateLimited;
+                    error.retryAt = rateLimited
+                        ? Math.max(Date.now() + 60000, Number.isFinite(retryAt) && retryAt > Date.now()
+                            ? retryAt + 1000 : Date.now() + 60 * 60 * 1000)
+                        : Date.now() + 15 * 60 * 1000;
+                    throw error;
+                }
+                const release = await res.json();
+                if (!validRelease(release)) throw new Error('GitHub Release did not return a valid version');
+                // Keep only public version metadata, not the entire GitHub response.
+                const metadata = {
+                    tag_name: release.tag_name,
+                    html_url: `https://github.com/bobcc4/yinyun-lxserver/releases/tag/${release.tag_name}`,
+                    published_at: release.published_at
+                };
+                releaseCheckState = { release: metadata, checkedAt: Date.now() };
+                saveReleaseCheckState();
+                return metadata;
+            } catch (error) {
+                releaseCheckState.failure = {
+                    message: error.message, status: error.status, rateLimited: !!error.rateLimited,
+                    retryAt: error.retryAt || Date.now() + 15 * 60 * 1000
+                };
+                saveReleaseCheckState();
+                console.warn('[Notification] 更新检查暂不可用，将在等待后重试：', error.message);
+                throw releaseCheckError(releaseCheckState.failure);
+            } finally {
+                clearTimeout(timeout);
             }
+        })();
+        try { return await releaseRequest; } finally { releaseRequest = null; }
+    }
+
+    async function fetchLatestRelease(isManual = false, force = false) {
+        if (validRelease(releaseCheckState.release)) {
+            updateVersionIndicators(releaseCheckState.release.tag_name, releaseCheckState.release.html_url);
+        }
+        try {
+            const release = await loadLatestRelease(isManual || force);
+            const latestVersion = release.tag_name;
 
             updateVersionIndicators(latestVersion, release.html_url);
 
@@ -398,16 +482,18 @@
                 renderModal(upToDateItem, 'temp_manual_check', null);
             }
         } catch (e) {
-            console.error('[Notification] Check failed:', e);
             if (isManual) {
                 let errorTitle = '检查更新失败';
                 let errorMessage = '无法连接到更新服务器，请检查网络连接或稍后重试。';
 
-                if (e.message.includes('404')) {
+                if (e.status === 404) {
                     errorMessage = 'GitHub 暂未发布正式版本，请稍后重试。';
-                } else if (e.message.includes('403')) {
-                    errorMessage = 'GitHub 更新接口请求次数已达上限，请稍后重试或直接打开项目发布页面。';
+                } else if (e.rateLimited) {
+                    errorMessage = '当前网络出口的 GitHub 更新接口额度已用完，暂时无法确认最新版本。这不影响音乐播放，也不代表 NAS 登录失败。';
+                } else if (e.status === 403) {
+                    errorMessage = 'GitHub 拒绝了更新检查请求（403），请检查网络或代理设置。这不代表 NAS 登录失败。';
                 }
+                if (e.retryAt) errorMessage += ` 请在 ${new Date(e.retryAt).toLocaleString('zh-CN')} 后重试，或直接查看发布页。`;
 
                 const errorItem = {
                     id: 'manual_check_error',
@@ -415,10 +501,10 @@
                     ui: {
                         title: errorTitle,
                         message: errorMessage,
-                        confirm_text: '确定',
-                        cancel_text: ''
+                        confirm_text: '查看发布页',
+                        cancel_text: '关闭'
                     },
-                    action: { type: 'close' },
+                    action: { type: 'link', url: 'https://github.com/bobcc4/yinyun-lxserver/releases/latest' },
                     logic: { interval_hours: 0 }
                 };
                 renderModal(errorItem, 'temp_manual_error', null);
@@ -428,7 +514,7 @@
 
     // ================= 5. 初始化入口 =================
     function init() {
-        // 每次进入页面都刷新版本状态，但同一版本只自动弹窗一次。
+        // 进入页面恢复版本标记，缓存过期后检查；同一版本只自动弹窗一次。
         checkUpdates(false, false);
     }
 

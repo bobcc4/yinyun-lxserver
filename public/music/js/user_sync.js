@@ -30,8 +30,9 @@ class LocalClient {
         return await res.json();
     }
 
-    async updateList(data) {
-        const res = await fetch(`${this.baseUrl}/list`, {
+    async updateList(data, options = {}) {
+        const query = options.refreshedNetworkListId ? '?' + new URLSearchParams({ refreshedNetworkListId: options.refreshedNetworkListId }) : '';
+        const res = await fetch(`${this.baseUrl}/list${query}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getUserAuthHeaders() },
             body: JSON.stringify(data)
@@ -59,9 +60,9 @@ const SyncManager = {
         return await this.client.getList();
     },
 
-    async push(data) {
+    async push(data, options = {}) {
         if (!this.client) throw new Error('同步账户尚未初始化');
-        return await this.client.updateList(data);
+        return await this.client.updateList(data, options);
     }
 };
 

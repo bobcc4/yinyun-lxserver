@@ -2000,6 +2000,9 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             // Create a snapshot after update
             await userSpace.listManage.createSnapshot()
 
+            const refreshedListId = urlObj.searchParams.get('refreshedNetworkListId')
+            if (refreshedListId) await networkPlaylistMonitor.acknowledgeRefresh(username!, refreshedListId)
+
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true }))
           } catch (err: any) {

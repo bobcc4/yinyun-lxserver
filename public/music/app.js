@@ -172,6 +172,8 @@ try {
 }
 window.settings = settings; // 显式挂载到 window
 window.networkListUpdateMap = new Set();
+window.networkListErrorMap = new Map();
+window.networkListStateRevision = 0;
 let networkListAutoCheckTimer = null;
 
 function escapeHtmlText(value) {
@@ -295,8 +297,10 @@ window.checkNetworkListUpdates = checkNetworkListUpdates;
 // declarations intentionally replace the legacy browser-only implementation.
 function applyNetworkListStatusesV162(statuses) {
     window.networkListUpdateMap.clear();
+    window.networkListErrorMap.clear();
     (Array.isArray(statuses) ? statuses : []).forEach(status => {
         if (status && status.changed && status.listId) window.networkListUpdateMap.add(status.listId);
+        if (status && status.error && status.listId) window.networkListErrorMap.set(status.listId, status.error);
     });
     if (typeof renderMyLists === 'function' && currentListData) renderMyLists(currentListData);
 }
@@ -304,13 +308,14 @@ function applyNetworkListStatusesV162(statuses) {
 async function loadNetworkListStatusesV162() {
     await waitForUserAuthReady();
     if (!isUserLoggedIn()) return [];
+    const revision = window.networkListStateRevision;
     const response = await fetch('/api/v1/player/network-playlists/status', {
         headers: getUserAuthHeaders(), cache: 'no-store'
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
     const statuses = payload.data || [];
-    applyNetworkListStatusesV162(statuses);
+    if (revision === window.networkListStateRevision) applyNetworkListStatusesV162(statuses);
     return statuses;
 }
 
@@ -328,12 +333,14 @@ async function checkNetworkListUpdates(manual = false) {
         if (manual && window.showToast) showToast('info', '请先登录同步账户', 3000);
         return [];
     }
+    const revision = window.networkListStateRevision;
     const response = await fetch('/api/v1/player/network-playlists/check', {
         method: 'POST', headers: getUserAuthHeaders(), cache: 'no-store'
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.success === false) throw new Error(payload.message || `HTTP ${response.status}`);
     const statuses = payload.data || [];
+    if (revision !== window.networkListStateRevision) return loadNetworkListStatusesV162();
     applyNetworkListStatusesV162(statuses);
     const changed = statuses.filter(item => item.changed);
     const failed = statuses.filter(item => item.error);
@@ -8919,7 +8926,81 @@ function initFavoriteSidebarSortable(container) {
     });
 }
 
+let closePlaylistMenu = null;
+
+function openPlaylistMenu(listObj, anchor, event) {
+    event.stopPropagation();
+    const alreadyOpen = anchor.getAttribute('aria-expanded') === 'true';
+    if (closePlaylistMenu) closePlaylistMenu();
+    if (alreadyOpen) return;
+    const id = typeof listObj === 'string' ? listObj : listObj.id;
+    const actions = [];
+    if (typeof listObj !== 'string') {
+        actions.push(['分享给本站用户', 'fa-user-friends', handleSharePlaylist]);
+        actions.push(['跨服务端分享或导出 JSON', 'fa-share-alt', handlePlaylistExchangeMenu]);
+        actions.push(['重命名歌单', 'fa-pen', handleRenameList]);
+    }
+    if (listObj.sourceListId && listObj.source) {
+        actions.push(['更新歌单内容', 'fa-sync-alt', handleRefreshList]);
+        actions.push(['打开原始歌单', 'fa-external-link-alt', handleJumpToOriginalList]);
+    }
+    if (id !== 'default' && id !== 'love') actions.push(['删除歌单', 'fa-trash', handleRemoveList]);
+    const menu = document.createElement('div');
+    menu.className = 'playlist-context-menu t-bg-panel t-text-main';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', '歌单操作');
+    const close = (restoreFocus = false) => {
+        menu.remove();
+        anchor.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('pointerdown', outside, true);
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('resize', dismiss);
+        document.removeEventListener('scroll', onScroll, true);
+        closePlaylistMenu = null;
+        if (restoreFocus && anchor.isConnected) anchor.focus();
+    };
+    const outside = e => { if (!menu.contains(e.target) && !anchor.contains(e.target)) close(); };
+    const dismiss = () => close();
+    const onScroll = e => { if (!menu.contains(e.target)) close(); };
+    const onKey = e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+        if (e.key === 'Tab') close();
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+            e.preventDefault(); e.stopPropagation();
+            const buttons = [...menu.querySelectorAll('button')];
+            const current = buttons.indexOf(document.activeElement);
+            const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1
+                : (current + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+            buttons[next].focus();
+        }
+    };
+    actions.forEach(([label, icon, handler]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('role', 'menuitem');
+        if (icon === 'fa-trash') button.classList.add('playlist-menu-danger');
+        button.innerHTML = `<i class="fas ${icon}" aria-hidden="true"></i><span>${label}</span>`;
+        button.onclick = e => {
+            e.stopPropagation(); close();
+            Promise.resolve(handler(id, e)).catch(error => showError(error.message || '歌单操作失败'));
+        };
+        menu.appendChild(button);
+    });
+    document.body.appendChild(menu);
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - 8))}px`;
+    anchor.setAttribute('aria-expanded', 'true');
+    closePlaylistMenu = close;
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', dismiss);
+    menu.querySelector('button')?.focus();
+}
+
 function renderMyLists(data) {
+    if (closePlaylistMenu) closePlaylistMenu();
     const container = document.getElementById('my-lists-container');
     container.innerHTML = '';
 
@@ -8934,47 +9015,39 @@ function renderMyLists(data) {
         const id = typeof listObj === 'string' ? listObj : listObj.id;
         const displayName = String(name || '未命名歌单');
         const div = document.createElement('div');
-        div.className = "px-6 py-2 text-sm t-text-muted hover:t-bg-main cursor-pointer flex items-center group transition-colors overflow-hidden";
+        div.className = "playlist-sidebar-row text-sm t-text-muted hover:t-bg-main cursor-pointer group transition-colors";
         div.setAttribute('data-sidebar-list-id', id);
         div.setAttribute('data-sidebar-sort-id', id);
         div.onclick = () => handleListClick(id);
 
-        // Use createMarqueeHtml for list name
-        const nameHtml = displayName.length > 8
-            ? createMarqueeHtml(displayName, 'flex-1')
-            : `<span class="ml-2 flex-1 truncate">${escapeHtmlText(displayName)}</span>`;
-
-        // Buttons logic (for collected external playlists)
-        const showExternalOps = listObj && listObj.sourceListId && listObj.source;
-        let opsHtml = '';
-        if (showExternalOps) {
-            const updateBadge = window.networkListUpdateMap && window.networkListUpdateMap.has(id)
-                ? `<span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold mr-2" title="歌单有更新">!</span>`
-                : '';
-            opsHtml = `
-                <i class="fas fa-sync-alt refresh-btn text-gray-400 hover:text-emerald-500 hidden group-hover:block flex-shrink-0 text-[10px] mr-2 transition-all active:rotate-180" 
-                   title="更新歌单内容" 
-                   onclick="event.stopPropagation(); handleRefreshList('${id}', event)"></i>
-                <i class="fas fa-external-link-alt jump-btn text-gray-400 hover:text-emerald-500 hidden group-hover:block flex-shrink-0 text-[10px] mr-2 transition-all" 
-                   title="打开原始歌单" 
-                   onclick="event.stopPropagation(); handleJumpToOriginalList('${id}', event)"></i>
-                ${updateBadge}
-            `;
-        }
-
         div.innerHTML = `
-            <span class="favorite-sidebar-drag-handle cursor-grab t-text-muted/60 hover:text-emerald-500 mr-2 flex-shrink-0 touch-none" title="拖拽排序">
+            <span class="favorite-sidebar-drag-handle cursor-grab t-text-muted touch-none" title="拖拽排序">
                 <i class="fas fa-grip-vertical text-xs"></i>
             </span>
-            ${opsHtml}
-            <i class="fas ${icon} w-5 t-text-muted group-hover:text-emerald-500 transition-colors flex-shrink-0"></i>
-            ${displayName.length > 8 ? `<div class="ml-2 flex-1 overflow-hidden">${nameHtml}</div>` : nameHtml}
-            <span class="text-xs text-gray-300 group-hover:t-text-muted mr-2 flex-shrink-0">${count}</span>
-            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="分享给本站用户" aria-label="分享给本站用户" onclick="handleSharePlaylist('${id}', event)"><i class="fas fa-user-friends text-[10px]"></i></button>` : ''}
-            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="跨服务端分享或导出 JSON" aria-label="跨服务端分享或导出 JSON" onclick="handlePlaylistExchangeMenu('${id}', event)"><i class="fas fa-share-alt text-[10px]"></i></button>` : ''}
-            ${typeof listObj !== 'string' ? `<button type="button" class="text-gray-300 hover:text-emerald-500 flex-shrink-0 mr-2 transition-colors" title="重命名歌单" aria-label="重命名歌单" onclick="handleRenameList('${id}', event)"><i class="fas fa-pen text-[10px]"></i></button>` : ''}
-            ${id !== 'default' && id !== 'love' ? `<i class="fas fa-trash text-gray-300 hover:text-red-500 hidden group-hover:block flex-shrink-0" onclick="handleRemoveList('${id}', event)"></i>` : ''}
+            <span class="playlist-sidebar-icon"><i class="fas ${icon}" aria-hidden="true"></i></span>
+            <span class="playlist-sidebar-name"></span>
+            <span class="playlist-sidebar-count text-xs"></span>
+            <button type="button" class="playlist-more" title="歌单操作" aria-label="歌单操作" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
         `;
+        const nameElement = div.querySelector('.playlist-sidebar-name');
+        nameElement.textContent = displayName;
+        nameElement.title = displayName;
+        div.querySelector('.playlist-sidebar-count').textContent = String(count);
+        const more = div.querySelector('.playlist-more');
+        if (typeof listObj !== 'string') more.onclick = event => openPlaylistMenu(listObj, more, event);
+        else { more.disabled = true; more.style.visibility = 'hidden'; }
+        if (listObj.sourceListId && listObj.source) {
+            const error = window.networkListErrorMap.get(id);
+            const changed = window.networkListUpdateMap.has(id);
+            if (error || changed) {
+                const badge = document.createElement('span');
+                badge.className = error ? 'playlist-status-error' : 'playlist-status-update';
+                badge.textContent = error ? '!' : '';
+                badge.title = error ? `歌单检测失败：${error}` : '歌单有更新';
+                badge.setAttribute('aria-label', badge.title);
+                div.querySelector('.playlist-sidebar-icon').appendChild(badge);
+            }
+        }
         return div;
     };
 
@@ -9787,7 +9860,7 @@ async function handleRefreshList(listId, event, silent = false) {
         const res = await fetch(url);
         const data = await res.json();
 
-        if (!data || !data.list) throw new Error('数据拉取失败');
+        if (!res.ok || !Array.isArray(data?.list)) throw new Error('数据拉取失败');
 
         // 格式化新歌曲列表
         const newList = data.list.map(s => {
@@ -9796,20 +9869,24 @@ async function handleRefreshList(listId, event, silent = false) {
             return item;
         });
 
-        // 更新列表模型
-        list.list = newList;
+        // Save a separate snapshot; a failed save must not change the visible playlist.
+        const updatedList = { ...list, list: newList };
         if (data.info) {
-            if (data.info.name) list.name = data.info.name;
-            if (data.info.img || data.info.pic) list.Album = data.info.img || data.info.pic;
+            if (data.info.img || data.info.pic) updatedList.Album = data.info.img || data.info.pic;
         }
+        const updatedData = { ...currentListData, userList: currentListData.userList.map(item => item.id === listId ? updatedList : item) };
+        const saved = await pushDataChange(updatedData, { refreshedNetworkListId: listId });
+        if (!saved) throw new Error('歌单未保存到服务端，请重试');
+        window.networkListStateRevision++;
+        setActiveListData(updatedData);
 
         // 清除该列表的更新标记
         if (window.networkListUpdateMap) {
             window.networkListUpdateMap.delete(listId);
         }
+        window.networkListErrorMap.delete(listId);
 
         // 推送同步并重绘 UI
-        await pushDataChange();
         renderMyLists(currentListData);
 
         // 如果当前正处于该列表视图，刷新结果列表显示
@@ -9928,22 +10005,20 @@ window.handleSyncLogout = handleSyncLogout;
 window.resetAllSettings = resetAllSettings;
 
 // Save list changes to the current account.
-async function pushDataChange(customListData) {
+async function pushDataChange(customListData, options = {}) {
     const listToSave = customListData || currentListData;
     if (!listToSave) return;
-
-    // 1. 优先同步保存到客户端 IndexedDB 本地缓存
-    await window.ListStore.set(listToSave).catch(e => console.error('[IDBStore] 保存失败:', e));
 
     // 同步当前登录用户的列表数据
     try {
         if (window.SyncManager && window.SyncManager.client) {
-            await window.SyncManager.push(listToSave);
+            await window.SyncManager.push(listToSave, options);
             console.log('Data Pushed to Remote');
         } else {
             // 本地无同步模式：调用 REST API 推送给当前用户
             const headers = getUserAuthHeaders();
-            const res = await fetch('/api/v1/player/user/list', {
+            const query = options.refreshedNetworkListId ? '?' + new URLSearchParams({ refreshedNetworkListId: options.refreshedNetworkListId }) : '';
+            const res = await fetch('/api/v1/player/user/list' + query, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -9953,6 +10028,7 @@ async function pushDataChange(customListData) {
             });
             if (!res.ok) throw new Error(await res.text());
         }
+        await window.ListStore.set(listToSave).catch(e => console.error('[IDBStore] 保存失败:', e));
         return true;
     } catch (e) {
         console.error('Push Failed', e);
