@@ -94,9 +94,6 @@ Docker 容器中的 `127.0.0.1` 不等于 NAS 主机。代理位于主机时使�
 | --- | --- | --- |
 | `SUBSONIC_ENABLE` | `subsonic.enable` | `true` |
 | `SUBSONIC_PATH` | `subsonic.path` | `/rest` |
-| `SUBSONIC_PORT` | `subsonic.port` | `0` | 独立 Subsonic 端口；`0` 表示与主服务共用端口 |
-
-启用独立端口后，该端口只处理配置的 Subsonic 路径，其余路径返回 404。请在防火墙和反向代理中只向客户端开放需要的端口。
 
 以下高级项当前通过 `config.js` 或后台配置：
 

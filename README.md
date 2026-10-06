@@ -91,7 +91,7 @@
 
 ### 6. 服务状态与维护
 
-管理后台集中展示连接数、用户数、运行时间和资源占用，并提供数据、快照、WebDAV、日志和系统维护入口。支持每日配置备份、独立歌单快照目录，以及将 Subsonic API 与管理服务分端口监听。
+管理后台集中展示连接数、用户数、运行时间和资源占用，并提供数据、快照、WebDAV、日志和系统维护入口。支持每日配置备份和独立歌单快照目录。
 
 <p align="center">
   <img src="docs/public/screenshots/admin-dashboard.png" width="900" alt="管理后台仪表盘">

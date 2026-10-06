@@ -179,9 +179,6 @@ declare namespace LX {
      */
     'subsonic.path'?: string
 
-    /** Subsonic 独立监听端口，0 表示关闭 */
-    'subsonic.port'?: number
-
     /**
      * 是否开启 Subsonic 调试日志模式 (默认 false/true)
      */

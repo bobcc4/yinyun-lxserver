@@ -57,7 +57,6 @@ const config: LX.Config = {
 
   'subsonic.enable': true, // 是否启用 Subsonic 服务
   'subsonic.path': '/rest', // Subsonic 访问路径
-  'subsonic.port': 0, // 独立 Subsonic 监听端口，0 表示与主服务共用端口
   'subsonic.enableDebug': true, // 是否开启 Subsonic 调试日志模式
   'subsonic.onlineSearch': true, // 是否开启 Subsonic 在线全网搜索
   'subsonic.onlineSearchMode': 'fallback', // 在线搜索模式: fallback | merge | local_only

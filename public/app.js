@@ -1798,7 +1798,6 @@ class App {
             if (form.elements['subsonic.path']) {
                 form.elements['subsonic.path'].value = config['subsonic.path'] || '/rest';
             }
-            if (form.elements['subsonic.port']) form.elements['subsonic.port'].value = config['subsonic.port'] || 0;
             if (form.elements['subsonic.enableDebug']) {
                 form.elements['subsonic.enableDebug'].checked = config['subsonic.enableDebug'] === true;
             }
@@ -1971,7 +1970,6 @@ class App {
             'sync.backupInterval': parseInt(formData.get('sync.backupInterval')) || 24,
             'subsonic.enable': formData.get('subsonic.enable') === 'on',
             'subsonic.path': (formData.get('subsonic.path') || '').trim() || '/rest',
-            'subsonic.port': parseInt(formData.get('subsonic.port')) || 0,
             'subsonic.enableDebug': formData.get('subsonic.enableDebug') === 'on',
             'subsonic.onlineSearch': formData.get('subsonic.onlineSearch') === 'on',
             'subsonic.onlineSearchMode': formData.get('subsonic.onlineSearchMode') || 'fallback',

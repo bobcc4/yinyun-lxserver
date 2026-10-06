@@ -1057,9 +1057,7 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
     // [Subsonic API]
     const subsonicEnable = global.lx.config['subsonic.enable']
     const subsonicPath = normalizePath(global.lx.config['subsonic.path'] || '/rest')
-    const dedicatedSubsonicPort = Number(global.lx.config['subsonic.port'])
-    const dedicatedSubsonicActive = dedicatedSubsonicPort > 0 && dedicatedSubsonicPort !== Number(global.lx.config.port)
-    if (subsonicEnable && !dedicatedSubsonicActive && (pathname.startsWith(subsonicPath + '/') || pathname === subsonicPath)) {
+    if (subsonicEnable && (pathname.startsWith(subsonicPath + '/') || pathname === subsonicPath)) {
       const { subsonicHandler } = require('./subsonic')
       return subsonicHandler.handleRequest(req, res, urlObj)
     }
@@ -4985,7 +4983,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             'snapshot.backupPath': global.lx.config['snapshot.backupPath'] || '',
             'subsonic.enable': global.lx.config['subsonic.enable'] ?? true,
             'subsonic.path': global.lx.config['subsonic.path'] ?? '/rest',
-            'subsonic.port': global.lx.config['subsonic.port'] ?? 0,
             'subsonic.enableDebug': global.lx.config['subsonic.enableDebug'] ?? true,
             'subsonic.onlineSearch': global.lx.config['subsonic.onlineSearch'] ?? true,
             'subsonic.onlineSearchMode': global.lx.config['subsonic.onlineSearchMode'] ?? 'fallback',
@@ -5072,10 +5069,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
               if (newConfig['subsonic.path'] !== undefined) {
                 global.lx.config['subsonic.path'] = newConfig['subsonic.path'].replace(/\/+$/, '') || '/rest'
               }
-              if (newConfig['subsonic.port'] !== undefined) {
-                const subsonicPort = Number(newConfig['subsonic.port'])
-                global.lx.config['subsonic.port'] = Number.isFinite(subsonicPort) && subsonicPort >= 0 ? Math.floor(subsonicPort) : 0
-              }
               if (newConfig['snapshot.backupPath'] !== undefined) updateAllUserSnapshotDirs(global.lx.config['snapshot.backupPath'])
               if (newConfig['subsonic.enableDebug'] !== undefined) global.lx.config['subsonic.enableDebug'] = newConfig['subsonic.enableDebug']
               if (newConfig['subsonic.onlineSearch'] !== undefined) global.lx.config['subsonic.onlineSearch'] = newConfig['subsonic.onlineSearch']
@@ -5146,7 +5139,6 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
                 'snapshot.backupPath': global.lx.config['snapshot.backupPath'],
                 'subsonic.enable': global.lx.config['subsonic.enable'],
                 'subsonic.path': global.lx.config['subsonic.path'],
-                'subsonic.port': global.lx.config['subsonic.port'],
                 'subsonic.enableDebug': global.lx.config['subsonic.enableDebug'],
                 'subsonic.onlineSearch': global.lx.config['subsonic.onlineSearch'],
                 'subsonic.onlineSearchMode': global.lx.config['subsonic.onlineSearchMode'],
@@ -5915,37 +5907,6 @@ export const startServer = async (port: number, ip: string) => {
     status.address = []
     // status.code = ''
   })
-  const subsonicPort = Number(global.lx.config['subsonic.port'])
-  if (global.lx.config['subsonic.enable'] && Number.isInteger(subsonicPort) && subsonicPort > 0 && subsonicPort !== port) {
-    const subsonicPath = (global.lx.config['subsonic.path'] || '/rest').replace(/\/+$/, '') || '/rest'
-    const subsonicServer = http.createServer((req, res) => {
-      const urlObj = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204, {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': '*',
-        })
-        res.end()
-        return
-      }
-      if (urlObj.pathname === subsonicPath || urlObj.pathname.startsWith(`${subsonicPath}/`)) {
-        const { subsonicHandler } = require('./subsonic')
-        void subsonicHandler.handleRequest(req, res, urlObj)
-        return
-      }
-      res.writeHead(404, { 'Cache-Control': 'no-store' })
-      res.end()
-    })
-    subsonicServer.on('error', (error: any) => {
-      console.error(`[Subsonic] 独立端口 ${subsonicPort} 启动失败:`, error.message)
-    })
-    subsonicServer.listen(subsonicPort, ip, () => {
-      console.log(`[Subsonic] 独立监听已启动: ${ip}:${subsonicPort}${subsonicPath}`)
-    })
-  } else if (subsonicPort === port && subsonicPort > 0) {
-    console.warn('[Subsonic] 独立端口与主端口相同，继续由主服务提供 Subsonic API')
-  }
   // .finally(() => {
   //   sendStatus(status)
   // })
