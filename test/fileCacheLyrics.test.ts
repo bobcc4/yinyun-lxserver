@@ -38,6 +38,34 @@ test('does not create a lyric sidecar when no audio file exists', () => {
   assert.equal(fs.readdirSync(cacheDir).some(file => file.endsWith('.lrc')), false)
 })
 
+test('does not use a lower-quality cache for a higher-quality playback request', () => {
+  const source = path.resolve(previousCwd, 'public/music/assets/medias/filters/bright-hall.wav')
+  const username = 'quality-cache'
+  const cacheDir = fileCache.getCacheDir(username)
+  const lowFilename = 'same-song-128k.wav'
+  const highFilename = 'same-song-flac.wav'
+  fs.copyFileSync(source, path.join(cacheDir, lowFilename))
+  fs.copyFileSync(source, path.join(cacheDir, highFilename))
+  const songId = 'tx_quality_cache'
+  const base = { id: songId, name: '同一首歌', singer: '测试歌手', source: 'tx', songmid: 'quality_cache' }
+  fileCache.indexManager.update(username, { ...base, filename: lowFilename, folder: 'cache', quality: '128k' } as any, 'cache')
+  fileCache.indexManager.update(username, { ...base, filename: highFilename, folder: 'cache', quality: 'flac' } as any, 'cache')
+
+  const highRequest = fileCache.checkCache({ ...base, quality: 'flac' }, username)
+  assert.equal(highRequest.exists, true)
+  assert.equal(highRequest.quality, 'flac')
+  assert.equal(highRequest.filename, highFilename)
+
+  fs.unlinkSync(path.join(cacheDir, highFilename))
+  fileCache.indexManager.remove(username, songId, 'cache', 'flac')
+  const missingHighRequest = fileCache.checkCache({ ...base, quality: 'flac' }, username)
+  assert.equal(missingHighRequest.exists, false)
+
+  const lowRequest = fileCache.checkCache({ ...base, quality: '128k' }, username)
+  assert.equal(lowRequest.exists, true)
+  assert.equal(lowRequest.quality, '128k')
+})
+
 test('fixed default storage still discovers nested music in the legacy data location', async () => {
   assert.equal(fileCache.getCacheLocation(), 'root')
   assert.equal(fileCache.getCacheDir('legacy', true), path.join(root, 'music', 'legacy'))

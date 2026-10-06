@@ -633,10 +633,12 @@ class DownloadManager {
     // Toggle drawer
     toggleDrawer() {
         if (this.drawer.classList.contains('translate-x-full')) {
+            window.closeQueueDrawer?.();
             this.drawer.classList.remove('translate-x-full');
         } else {
             this.drawer.classList.add('translate-x-full');
         }
+        window.updateQueueDownloadDrawerBackdrop?.();
     }
 
     // Convert bytes to readable string

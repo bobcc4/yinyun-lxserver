@@ -633,6 +633,34 @@ const detectQualityFromBitrate = (bitrate: number | undefined, ext: string, tagg
 
 const losslessQualitySet = new Set(['flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master', 'ape', 'wav'])
 
+// A cached file may satisfy a lower-quality request, but it must never satisfy
+// a higher-quality request. Keep this ordering separate from source fallback,
+// which is allowed to try lower qualities only after online resolution fails.
+const CACHE_QUALITY_RANK: Record<string, number> = {
+    '128k': 0,
+    '192k': 1,
+    '320k': 2,
+    flac: 3,
+    flac24bit: 4,
+    hires: 5,
+    atmos: 6,
+    atmos_plus: 7,
+    master: 8,
+    ape: 3,
+    wav: 3,
+}
+
+export const isCacheQualityCompatible = (cachedQuality: unknown, requestedQuality: unknown) => {
+    const cached = String(cachedQuality || '').toLowerCase()
+    const requested = String(requestedQuality || '').toLowerCase()
+    if (!requested || requested === 'unknown') return true
+    if (!cached || cached === 'unknown') return false
+    const cachedRank = CACHE_QUALITY_RANK[cached]
+    const requestedRank = CACHE_QUALITY_RANK[requested]
+    if (cachedRank === undefined || requestedRank === undefined) return cached === requested
+    return cachedRank >= requestedRank
+}
+
 const isClearlyLossyAudio = (container: string, tagger?: any) => {
     const nativeQuality = String(tagger?.quality || '').toLowerCase()
     return nativeQuality === 'hq' || container === 'mp3' || container === 'ogg'
@@ -1732,7 +1760,17 @@ export const checkCache = (songInfo: any, username?: string, isLyricCheck: boole
         const useExact = !!songInfo.exactQuality
         const folderTypes: Array<'cache' | 'music'> = ['cache', 'music']
         for (const folder of folderTypes) {
-            const cached = indexManager.get(normalizedUsername, id, folder, quality, useExact)
+            const cached = useExact
+                ? indexManager.get(normalizedUsername, id, folder, quality, true)
+                : quality
+                    ? indexManager.getAll(normalizedUsername, folder)
+                        .filter(item => item.id === id && isCacheQualityCompatible(item.quality, quality))
+                        .sort((left, right) => (
+                            Number(right.quality === quality) - Number(left.quality === quality) ||
+                            (CACHE_QUALITY_RANK[String(right.quality || '').toLowerCase()] ?? -1) -
+                            (CACHE_QUALITY_RANK[String(left.quality || '').toLowerCase()] ?? -1)
+                        ))[0]
+                    : indexManager.get(normalizedUsername, id, folder, quality, false)
             if (cached) {
                 // 二次校验：exactQuality 模式下确保音质匹配
                 if (useExact && quality && cached.quality !== quality) continue

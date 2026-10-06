@@ -1218,12 +1218,32 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== 播放队列 (Queue) 逻辑 ====================
 let isQueueRendered = false;
 
+function updateQueueDownloadDrawerBackdrop() {
+    const backdrop = document.getElementById('queue-download-drawer-backdrop');
+    if (!backdrop) return;
+    const queue = document.getElementById('queue-drawer');
+    const download = document.getElementById('download-drawer');
+    const visible = [queue, download].some(drawer => drawer && !drawer.classList.contains('translate-x-full'));
+    backdrop.classList.toggle('hidden', !visible);
+    backdrop.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
+window.updateQueueDownloadDrawerBackdrop = updateQueueDownloadDrawerBackdrop;
+
+function closeQueueDrawer() {
+    const drawer = document.getElementById('queue-drawer');
+    if (drawer && !drawer.classList.contains('translate-x-full')) drawer.classList.add('translate-x-full');
+    updateQueueDownloadDrawerBackdrop();
+}
+window.closeQueueDrawer = closeQueueDrawer;
+
 function toggleQueueDrawer() {
     const drawer = document.getElementById('queue-drawer');
     if (!drawer) return;
 
     const isHidden = drawer.classList.contains('translate-x-full');
     if (isHidden) {
+        const downloadDrawer = document.getElementById('download-drawer');
+        if (downloadDrawer) downloadDrawer.classList.add('translate-x-full');
         renderQueue();
         drawer.classList.remove('translate-x-full');
         // 自动定位当前歌曲
@@ -1241,6 +1261,7 @@ function toggleQueueDrawer() {
     } else {
         drawer.classList.add('translate-x-full');
     }
+    updateQueueDownloadDrawerBackdrop();
 }
 window.toggleQueueDrawer = toggleQueueDrawer;
 
@@ -5729,6 +5750,13 @@ function updatePlaybackRateUI() {
 
 // 监听全局点击，关闭菜单
 document.addEventListener('click', (e) => {
+    if (e.target === document.getElementById('queue-download-drawer-backdrop')) {
+        closeQueueDrawer();
+        if (window.SystemDownloadManager?.drawer) window.SystemDownloadManager.drawer.classList.add('translate-x-full');
+        updateQueueDownloadDrawerBackdrop();
+        return;
+    }
+
     // 关闭播放模式菜单
     const pmMenu = document.getElementById('play-mode-menu');
     const pmBtn = document.getElementById('play-mode-btn');
