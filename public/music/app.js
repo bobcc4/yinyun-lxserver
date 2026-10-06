@@ -10794,6 +10794,11 @@ async function renderCustomSources() {
             const vmTag = source.allowUnsafeVM ?
                 `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-50 text-red-500 border border-red-100 dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/30">VM</span>` : '';
 
+            const currentUsername = (localStorage.getItem('lx_sync_user') || '').trim().toLowerCase();
+            const isAdmin = !!localStorage.getItem('lx_admin_password');
+            const canManageSource = isUser && !source.readOnly;
+            const canShareSource = isAdmin && canManageSource && source.enabled && source.owner === currentUsername;
+
             const sourceUpdate = window.customSourceUpdateAlerts?.[source.id] || source.updateAlert;
             const updateUrl = sourceUpdate?.updateUrl && /^https?:\/\//i.test(sourceUpdate.updateUrl)
                 ? sourceUpdate.updateUrl
@@ -10802,12 +10807,8 @@ async function renderCustomSources() {
                 <div class="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                     <span><i class="fas fa-arrow-circle-up mr-1"></i>${escapeHtmlText(sourceUpdate.log || '检测到音源有更新')}</span>
                     ${updateUrl ? `<a href="${escapeHtmlText(updateUrl)}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">查看更新</a>` : ''}
+                    ${canManageSource ? '<button type="button" data-update-source="' + escapeHtmlText(source.id) + '" class="font-semibold underline hover:no-underline">立即更新</button>' : ''}
                 </div>` : '';
-
-            const currentUsername = (localStorage.getItem('lx_sync_user') || '').trim().toLowerCase();
-            const isAdmin = !!localStorage.getItem('lx_admin_password');
-            const canManageSource = isUser && !source.readOnly;
-            const canShareSource = isAdmin && canManageSource && source.enabled && source.owner === currentUsername;
 
             div.innerHTML = `
             <div class="flex items-center self-stretch cursor-grab custom-source-handle t-text-muted hover:text-emerald-500 pr-4 -ml-2 transition-all active:scale-110 touch-none" title="拖拽排序">
@@ -10867,6 +10868,7 @@ async function renderCustomSources() {
             </div>
             `;
             container.appendChild(div);
+            div.querySelector('[data-update-source]')?.addEventListener('click', () => updateCustomSource(source.id));
             const platformInputs = Array.from(div.querySelectorAll('.custom-source-platform-toggle'));
             platformInputs.forEach(input => {
                 input.addEventListener('change', async () => {
@@ -11014,6 +11016,45 @@ async function checkCustomSourceUpdate(sourceId) {
 }
 
 // 重新加载源 (强制重新启用)
+async function updateCustomSource(sourceId, allowUnsafeVM = false) {
+    try {
+        const username = localStorage.getItem('lx_sync_user') || '';
+        if (!isUserLoggedIn() || !username) throw new Error('请先登录同步账户');
+        const headers = { 'Content-Type': 'application/json', ...getUserAuthHeaders() };
+        const adminPass = localStorage.getItem('lx_admin_password');
+        if (adminPass) headers['x-frontend-auth'] = adminPass;
+        const response = await fetch('/api/v1/player/custom-source/update', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ username, sourceId, allowUnsafeVM })
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (response.status === 403) {
+            showError(result.error || '更新该音源需要管理员授权');
+            const authorized = await handleAdminAuth('授权更新需要不安全 VM 模式的音源');
+            if (authorized) return updateCustomSource(sourceId, allowUnsafeVM);
+            return;
+        }
+        if (!response.ok || result.success === false) {
+            if (result.requireUnsafe) {
+                const confirmed = await showSelect('安全风险确认', result.message || '更新后的脚本需要不安全 VM 模式运行，可能存在安全风险，是否继续？', { danger: true, confirmText: '继续更新' });
+                if (confirmed) return updateCustomSource(sourceId, true);
+            }
+            throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        }
+
+        if (window.customSourceUpdateAlerts) delete window.customSourceUpdateAlerts[sourceId];
+        await renderCustomSources();
+        showSuccess(result.updated === false ? '当前音源已经是最新版本' : `音源已更新至 v${result.version || '最新版本'}`);
+    } catch (error) {
+        console.error('[CustomSource] Update failed:', error);
+        showError(`更新音源失败: ${error.message}`);
+    }
+}
+
+window.updateCustomSource = updateCustomSource;
+
 async function reloadSource(sourceId) {
     try {
         const username = localStorage.getItem('lx_sync_user') || '';

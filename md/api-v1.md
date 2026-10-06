@@ -38,6 +38,7 @@ Authorization: Bearer <accessToken>
 - Web 播放器音乐接口：`/api/v1/player/music/<path>`。
 - Web 播放器用户与设置接口：`/api/v1/player/user/<path>`。
 - Web 播放器自定义音源接口：`/api/v1/player/custom-source/<path>`。
+- 音源更新：`POST /api/v1/player/custom-source/check-update` 检查远程脚本，`POST /api/v1/player/custom-source/update` 校验后备份并原位更新。
 - Subsonic：`/rest/<path>`。
 
 ## 破坏性迁移

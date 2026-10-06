@@ -4755,6 +4755,9 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
         if (pathname === '/api/v1/player/custom-source/check-update' && req.method === 'POST') {
           return customSourceHandlers.handleCheckUpdate(req, res, username)
         }
+        if (pathname === '/api/v1/player/custom-source/update' && req.method === 'POST') {
+          return customSourceHandlers.handleUpdate(req, res, username)
+        }
         if (pathname === '/api/v1/player/custom-source/toggle' && req.method === 'POST') {
           return customSourceHandlers.handleToggle(req, res, username)
         }

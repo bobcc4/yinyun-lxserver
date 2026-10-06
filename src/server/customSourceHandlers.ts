@@ -374,6 +374,42 @@ const downloadScript = async (targetUrl: string, depth = 0): Promise<string> => 
     })
 }
 
+const sourceIdentityMatches = (source: StoredSource, metadata: Partial<{ name?: string }>, sourceUrl: string) => {
+    const remoteName = typeof metadata.name === 'string' ? metadata.name.trim() : ''
+    if (remoteName && generateId(remoteName) === source.id) return true
+
+    try {
+        const urlName = path.basename(new URL(sourceUrl).pathname)
+        return generateId(urlName, source.id) === source.id
+    } catch {
+        return false
+    }
+}
+
+const getRemoteSourceInfo = async (source: StoredSource, sourceUrl: string, allowUnsafeVM: boolean, req: IncomingMessage, res: ServerResponse) => {
+    const content = await downloadScript(sourceUrl)
+    const safeInfo = await getScriptInfo(content)
+    if (safeInfo.requireUnsafe && !allowUnsafeVM) {
+        sendJson(res, 200, {
+            success: false,
+            requireUnsafe: true,
+            message: '更新后的音源需要不安全 VM 模式，请确认后继续。',
+            metadata: safeInfo.metadata,
+        })
+        return null
+    }
+    if (safeInfo.requireUnsafe && !authorizeUnsafeSource(req, res, true, true)) return null
+
+    const scriptInfo = safeInfo.requireUnsafe ? await getScriptInfo(content, true) : safeInfo
+    if (scriptInfo.supportedSources.length === 0) {
+        throw new Error(scriptInfo.error || '远程脚本未注册任何音乐平台')
+    }
+    if (!sourceIdentityMatches(source, scriptInfo.metadata, sourceUrl)) {
+        throw new Error('远程脚本与当前音源身份不匹配，未执行更新')
+    }
+    return { content, ...scriptInfo }
+}
+
 export async function handleCheckUpdate(req: IncomingMessage, res: ServerResponse, username: string) {
     try {
         const owner = assertUsername(username)
@@ -404,6 +440,76 @@ export async function handleCheckUpdate(req: IncomingMessage, res: ServerRespons
         }
         sendJson(res, 200, { success: true, available: false, status: status?.status })
     } catch (error: any) {
+        sendJson(res, 400, { success: false, error: error.message })
+    }
+}
+
+export async function handleUpdate(req: IncomingMessage, res: ServerResponse, username: string) {
+    try {
+        const owner = assertUsername(username)
+        const { id, sourceId, allowUnsafeVM } = JSON.parse(await readBody(req))
+        const targetId = id || sourceId
+        const sources = readSources(owner)
+        const sourceIndex = sources.findIndex(item => item.id === targetId)
+        if (sourceIndex < 0) throw new Error('Source not found')
+        const source = sources[sourceIndex]
+        if (!source.sourceUrl) throw new Error('该音源没有可更新的远程地址')
+
+        const remoteUrl = new URL(source.sourceUrl)
+        if (!['http:', 'https:'].includes(remoteUrl.protocol)) throw new Error('只允许更新 HTTP/HTTPS 音源')
+        const remote = await getRemoteSourceInfo(source, remoteUrl.toString(), !!allowUnsafeVM || !!source.allowUnsafeVM, req, res)
+        if (!remote) return
+
+        const sourceDir = getSourceDir(owner)
+        const scriptPath = path.join(sourceDir, source.id)
+        const oldContent = fs.existsSync(scriptPath) ? fs.readFileSync(scriptPath, 'utf-8') : ''
+        const oldSources = JSON.stringify(sources)
+        if (remote.content === oldContent && String(remote.metadata.version || source.version) === String(source.version)) {
+            sendJson(res, 200, { success: true, updated: false, version: source.version })
+            return
+        }
+
+        const backupDir = path.join(sourceDir, 'backups')
+        fs.mkdirSync(backupDir, { recursive: true })
+        const backupPath = path.join(backupDir, `${source.id}.${Date.now()}.js`)
+        if (oldContent) fs.writeFileSync(backupPath, oldContent, 'utf-8')
+
+        const updatedSource: StoredSource = {
+            ...source,
+            name: String(remote.metadata.name || source.name),
+            version: remote.metadata.version || source.version,
+            author: String(remote.metadata.author || source.author || 'Unknown'),
+            description: String(remote.metadata.description || ''),
+            homepage: String(remote.metadata.homepage || ''),
+            size: Buffer.byteLength(remote.content, 'utf-8'),
+            supportedSources: remote.supportedSources,
+            requireUnsafe: remote.requireUnsafe,
+            allowUnsafeVM: remote.requireUnsafe,
+        }
+
+        try {
+            fs.writeFileSync(scriptPath, remote.content, 'utf-8')
+            sources[sourceIndex] = updatedSource
+            writeSources(owner, sources)
+            await initUserApis(owner)
+        } catch (error) {
+            if (oldContent) fs.writeFileSync(scriptPath, oldContent, 'utf-8')
+            else if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath)
+            fs.writeFileSync(path.join(sourceDir, 'sources.json'), oldSources, 'utf-8')
+            await initUserApis(owner).catch(() => undefined)
+            throw error
+        }
+
+        sendJson(res, 200, {
+            success: true,
+            updated: true,
+            id: source.id,
+            version: updatedSource.version,
+            supportedSources: updatedSource.supportedSources,
+            backup: oldContent ? path.relative(sourceDir, backupPath) : undefined,
+        })
+    } catch (error: any) {
+        console.error('[CustomSource] Update error:', error)
         sendJson(res, 400, { success: false, error: error.message })
     }
 }
