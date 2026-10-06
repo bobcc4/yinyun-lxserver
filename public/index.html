@@ -662,6 +662,20 @@
                         </div>
 
                         <!-- WebDAV 配置卡片 -->
+                        <div class="config-card glass" id="config-card-v180">
+                            <div class="config-card-header"><div><h3 class="config-card-title">高级服务设置</h3><p class="config-card-desc">代理策略、调试输出与备份位置</p></div></div>
+                            <div class="config-card-body">
+                                <div class="config-field"><label class="config-label">音乐平台代理</label><select name="proxy.music.mode" class="form-input config-input"><option value="inherit">继承全局代理</option><option value="direct">直连</option><option value="custom">独立代理</option></select><input type="text" name="proxy.music.address" class="form-input config-input" placeholder="http://127.0.0.1:7890" /></div>
+                                <div class="config-field"><label class="config-label">自定义音源代理</label><select name="proxy.customSource.mode" class="form-input config-input"><option value="inherit">继承全局代理</option><option value="direct">直连</option><option value="custom">独立代理</option></select><input type="text" name="proxy.customSource.address" class="form-input config-input" placeholder="http://127.0.0.1:7890" /></div>
+                                <div class="config-field"><label class="config-label">应用功能代理</label><select name="proxy.app.mode" class="form-input config-input"><option value="inherit">继承全局代理</option><option value="direct">直连</option><option value="custom">独立代理</option></select><input type="text" name="proxy.app.address" class="form-input config-input" placeholder="http://127.0.0.1:7890" /></div>
+                                <div class="config-toggle-row"><div class="config-toggle-info"><span class="config-toggle-label">DEBUG 模式</span><span class="config-toggle-desc">开启自定义音源普通日志；错误仍会记录。</span></div><label class="toggle-switch"><input type="checkbox" name="debug.enabled" /><span class="toggle-track"><span class="toggle-thumb"></span></span></label></div>
+                                <div class="config-divider"></div>
+                                <div class="config-toggle-row"><div class="config-toggle-info"><span class="config-toggle-label">每日配置备份</span><span class="config-toggle-desc">每天备份 config.js 并按保留天数清理。</span></div><label class="toggle-switch"><input type="checkbox" name="configBackup.enable" /><span class="toggle-track"><span class="toggle-thumb"></span></span></label></div>
+                                <div class="config-field-row"><div class="config-field"><label class="config-label">保留天数</label><input type="number" name="configBackup.retentionDays" class="form-input config-input" min="1" value="7" /></div><div class="config-field"><label class="config-label">配置备份目录</label><input type="text" name="configBackup.dir" class="form-input config-input" placeholder="默认 data/backups" /></div></div>
+                                <div class="config-field"><label class="config-label">歌单快照目录</label><input type="text" name="snapshot.backupPath" class="form-input config-input" placeholder="留空使用默认目录" /><small class="config-hint">相对路径基于 data 目录；更改后迁移现有快照。</small></div>
+                            </div>
+                        </div>
+
                         <div class="config-card glass" id="config-card-external-libraries">
                             <div class="config-card-header">
                                 <div class="config-card-icon" style="background: linear-gradient(135deg, #14b8a6, #0f766e);">
@@ -873,6 +887,7 @@
                                     <label class="config-label">Subsonic 访问路径</label>
                                     <input type="text" name="subsonic.path" class="form-input config-input"
                                         placeholder="/rest" />
+                                    <input type="number" name="subsonic.port" class="form-input config-input" min="0" placeholder="Subsonic 独立端口，0 与主端口共用" />
                                     <small class="config-hint">Subsonic API 默认路径为 /rest。修改后需在客户端同步更新 URL</small>
                                 </div>
                                 <div class="config-divider"></div>
@@ -1118,6 +1133,7 @@
                             <option value="token">Token日志</option>
                             <option value="errors">错误日志</option>
                         </select>
+                        <label style="display:flex;align-items:center;gap:.45rem;color:var(--text-secondary);font-size:.9rem"><input id="logs-auto-refresh" type="checkbox" /> 自动刷新</label>
                         <button id="refresh-logs-btn" class="btn-secondary">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="23 4 23 10 17 10" />

@@ -5,7 +5,7 @@ import path from 'node:path'
 import { getAddress, getIP } from '@/utils/tools'
 import { accessLog, startupLog, loginLog, tokenLog, sanitizeAccessUrl } from '@/utils/log4js'
 import { File } from '@/constants'
-import { getUserSpace, getServerId, getUserDirname, getUserSourcePath, migrateUserData, renameUserSpace, finishRenameUserSpace } from '@/user'
+import { getUserSpace, getServerId, getUserDirname, getUserSourcePath, migrateUserData, renameUserSpace, finishRenameUserSpace, updateAllUserSnapshotDirs } from '@/user'
 import { ElFinderConnector, getSystemRoot } from './elfinderConnector'
 import formidable from 'formidable'
 // @ts-ignore
@@ -1057,7 +1057,9 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
     // [Subsonic API]
     const subsonicEnable = global.lx.config['subsonic.enable']
     const subsonicPath = normalizePath(global.lx.config['subsonic.path'] || '/rest')
-    if (subsonicEnable && (pathname.startsWith(subsonicPath + '/') || pathname === subsonicPath)) {
+    const dedicatedSubsonicPort = Number(global.lx.config['subsonic.port'])
+    const dedicatedSubsonicActive = dedicatedSubsonicPort > 0 && dedicatedSubsonicPort !== Number(global.lx.config.port)
+    if (subsonicEnable && !dedicatedSubsonicActive && (pathname.startsWith(subsonicPath + '/') || pathname === subsonicPath)) {
       const { subsonicHandler } = require('./subsonic')
       return subsonicHandler.handleRequest(req, res, urlObj)
     }
@@ -4752,6 +4754,9 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
         if (pathname === '/api/v1/player/custom-source/list' && req.method === 'GET') {
           return customSourceHandlers.handleList(req, res, username)
         }
+        if (pathname === '/api/v1/player/custom-source/check-update' && req.method === 'POST') {
+          return customSourceHandlers.handleCheckUpdate(req, res, username)
+        }
         if (pathname === '/api/v1/player/custom-source/toggle' && req.method === 'POST') {
           return customSourceHandlers.handleToggle(req, res, username)
         }
@@ -4967,8 +4972,20 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
             'sync.backupInterval': global.lx.config['sync.backupInterval'] || 24,
             'proxy.all.enabled': global.lx.config['proxy.all.enabled'] || false,
             'proxy.all.address': global.lx.config['proxy.all.address'] || '',
+            'proxy.music.mode': global.lx.config['proxy.music.mode'] || 'inherit',
+            'proxy.music.address': global.lx.config['proxy.music.address'] || '',
+            'proxy.customSource.mode': global.lx.config['proxy.customSource.mode'] || 'inherit',
+            'proxy.customSource.address': global.lx.config['proxy.customSource.address'] || '',
+            'proxy.app.mode': global.lx.config['proxy.app.mode'] || 'inherit',
+            'proxy.app.address': global.lx.config['proxy.app.address'] || '',
+            'debug.enabled': global.lx.config['debug.enabled'] === true,
+            'configBackup.enable': global.lx.config['configBackup.enable'] !== false,
+            'configBackup.retentionDays': global.lx.config['configBackup.retentionDays'] || 7,
+            'configBackup.dir': global.lx.config['configBackup.dir'] || '',
+            'snapshot.backupPath': global.lx.config['snapshot.backupPath'] || '',
             'subsonic.enable': global.lx.config['subsonic.enable'] ?? true,
             'subsonic.path': global.lx.config['subsonic.path'] ?? '/rest',
+            'subsonic.port': global.lx.config['subsonic.port'] ?? 0,
             'subsonic.enableDebug': global.lx.config['subsonic.enableDebug'] ?? true,
             'subsonic.onlineSearch': global.lx.config['subsonic.onlineSearch'] ?? true,
             'subsonic.onlineSearchMode': global.lx.config['subsonic.onlineSearchMode'] ?? 'fallback',
@@ -5034,12 +5051,32 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
               if (newConfig['sync.backupInterval'] !== undefined) global.lx.config['sync.backupInterval'] = parseInt(newConfig['sync.backupInterval']) || 24
               if (newConfig['proxy.all.enabled'] !== undefined) global.lx.config['proxy.all.enabled'] = newConfig['proxy.all.enabled']
               if (newConfig['proxy.all.address'] !== undefined) global.lx.config['proxy.all.address'] = newConfig['proxy.all.address']
+              const configValues = global.lx.config as Record<string, any>
+              for (const category of ['music', 'customSource', 'app']) {
+                const modeKey = `proxy.${category}.mode`
+                const addressKey = `proxy.${category}.address`
+                if (newConfig[modeKey] !== undefined && ['inherit', 'direct', 'custom'].includes(newConfig[modeKey])) configValues[modeKey] = newConfig[modeKey]
+                if (newConfig[addressKey] !== undefined) configValues[addressKey] = String(newConfig[addressKey] || '').trim()
+              }
+              if (newConfig['debug.enabled'] !== undefined) global.lx.config['debug.enabled'] = newConfig['debug.enabled'] === true
+              if (newConfig['configBackup.enable'] !== undefined) global.lx.config['configBackup.enable'] = newConfig['configBackup.enable'] === true
+              if (newConfig['configBackup.retentionDays'] !== undefined) {
+                const days = Number(newConfig['configBackup.retentionDays'])
+                global.lx.config['configBackup.retentionDays'] = Number.isFinite(days) && days > 0 ? Math.floor(days) : 7
+              }
+              if (newConfig['configBackup.dir'] !== undefined) global.lx.config['configBackup.dir'] = String(newConfig['configBackup.dir'] || '').trim()
+              if (newConfig['snapshot.backupPath'] !== undefined) global.lx.config['snapshot.backupPath'] = String(newConfig['snapshot.backupPath'] || '').trim()
 
               // 新增：Subsonic 配置保存逻辑
               if (newConfig['subsonic.enable'] !== undefined) global.lx.config['subsonic.enable'] = newConfig['subsonic.enable']
               if (newConfig['subsonic.path'] !== undefined) {
                 global.lx.config['subsonic.path'] = newConfig['subsonic.path'].replace(/\/+$/, '') || '/rest'
               }
+              if (newConfig['subsonic.port'] !== undefined) {
+                const subsonicPort = Number(newConfig['subsonic.port'])
+                global.lx.config['subsonic.port'] = Number.isFinite(subsonicPort) && subsonicPort >= 0 ? Math.floor(subsonicPort) : 0
+              }
+              if (newConfig['snapshot.backupPath'] !== undefined) updateAllUserSnapshotDirs(global.lx.config['snapshot.backupPath'])
               if (newConfig['subsonic.enableDebug'] !== undefined) global.lx.config['subsonic.enableDebug'] = newConfig['subsonic.enableDebug']
               if (newConfig['subsonic.onlineSearch'] !== undefined) global.lx.config['subsonic.onlineSearch'] = newConfig['subsonic.onlineSearch']
               if (newConfig['subsonic.onlineSearchMode'] !== undefined) global.lx.config['subsonic.onlineSearchMode'] = newConfig['subsonic.onlineSearchMode']
@@ -5096,8 +5133,20 @@ const handleStartServer = async (port = 9527, ip = '127.0.0.1') => await new Pro
                 'sync.backupInterval': global.lx.config['sync.backupInterval'],
                 'proxy.all.enabled': global.lx.config['proxy.all.enabled'],
                 'proxy.all.address': global.lx.config['proxy.all.address'],
+                'proxy.music.mode': global.lx.config['proxy.music.mode'],
+                'proxy.music.address': global.lx.config['proxy.music.address'],
+                'proxy.customSource.mode': global.lx.config['proxy.customSource.mode'],
+                'proxy.customSource.address': global.lx.config['proxy.customSource.address'],
+                'proxy.app.mode': global.lx.config['proxy.app.mode'],
+                'proxy.app.address': global.lx.config['proxy.app.address'],
+                'debug.enabled': global.lx.config['debug.enabled'],
+                'configBackup.enable': global.lx.config['configBackup.enable'],
+                'configBackup.retentionDays': global.lx.config['configBackup.retentionDays'],
+                'configBackup.dir': global.lx.config['configBackup.dir'],
+                'snapshot.backupPath': global.lx.config['snapshot.backupPath'],
                 'subsonic.enable': global.lx.config['subsonic.enable'],
                 'subsonic.path': global.lx.config['subsonic.path'],
+                'subsonic.port': global.lx.config['subsonic.port'],
                 'subsonic.enableDebug': global.lx.config['subsonic.enableDebug'],
                 'subsonic.onlineSearch': global.lx.config['subsonic.onlineSearch'],
                 'subsonic.onlineSearchMode': global.lx.config['subsonic.onlineSearchMode'],
@@ -5866,6 +5915,37 @@ export const startServer = async (port: number, ip: string) => {
     status.address = []
     // status.code = ''
   })
+  const subsonicPort = Number(global.lx.config['subsonic.port'])
+  if (global.lx.config['subsonic.enable'] && Number.isInteger(subsonicPort) && subsonicPort > 0 && subsonicPort !== port) {
+    const subsonicPath = (global.lx.config['subsonic.path'] || '/rest').replace(/\/+$/, '') || '/rest'
+    const subsonicServer = http.createServer((req, res) => {
+      const urlObj = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+        })
+        res.end()
+        return
+      }
+      if (urlObj.pathname === subsonicPath || urlObj.pathname.startsWith(`${subsonicPath}/`)) {
+        const { subsonicHandler } = require('./subsonic')
+        void subsonicHandler.handleRequest(req, res, urlObj)
+        return
+      }
+      res.writeHead(404, { 'Cache-Control': 'no-store' })
+      res.end()
+    })
+    subsonicServer.on('error', (error: any) => {
+      console.error(`[Subsonic] 独立端口 ${subsonicPort} 启动失败:`, error.message)
+    })
+    subsonicServer.listen(subsonicPort, ip, () => {
+      console.log(`[Subsonic] 独立监听已启动: ${ip}:${subsonicPort}${subsonicPath}`)
+    })
+  } else if (subsonicPort === port && subsonicPort > 0) {
+    console.warn('[Subsonic] 独立端口与主端口相同，继续由主服务提供 Subsonic API')
+  }
   // .finally(() => {
   //   sendStatus(status)
   // })

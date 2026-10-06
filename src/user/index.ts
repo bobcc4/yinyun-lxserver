@@ -13,6 +13,17 @@ export interface UserSpace {
 const users = new Map<string, UserSpace>()
 const renamingUsers = new Set<string>()
 
+export const updateAllUserSnapshotDirs = (configuredPath?: string) => {
+  for (const [username, space] of users) {
+    try {
+      space.listManage.snapshotDataManage.updateSnapshotDir(configuredPath)
+      space.dislikeManage.snapshotDataManage.updateSnapshotDir(configuredPath)
+    } catch (error) {
+      console.error(`[Snapshot] Failed to update snapshot path for ${username}:`, error)
+    }
+  }
+}
+
 const delayTime = 60 * 60 * 1000 // 延长到 1 小时
 const delayReleaseTimeouts = new Map<string, NodeJS.Timeout>()
 const clearDelayReleaseTimeout = (userName: string) => {

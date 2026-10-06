@@ -21,9 +21,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    tags:
-      - 'v*'
 env:
   REGISTRY: ghcr.io
   # 使用 github.repository_owner 获取用户名，并指定音云镜像名

@@ -25,6 +25,7 @@ import { normalizeUsername, validateUsername } from './utils/username'
 import { normalizeAdminPath } from './adminPath'
 import { withUserRole } from './userRoles'
 import { resolveConfigPath } from './configPath'
+import { startConfigBackup } from './configBackup'
 
 // Declare Env Params Type
 type ENV_PARAMS_Type = typeof ENV_PARAMS
@@ -271,11 +272,29 @@ if (envParams.PROXY_ALL_ENABLED) {
 if (envParams.PROXY_ALL_ADDRESS) {
   global.lx.config['proxy.all.address'] = envParams.PROXY_ALL_ADDRESS
 }
+if (envParams.PROXY_MUSIC_MODE) global.lx.config['proxy.music.mode'] = envParams.PROXY_MUSIC_MODE as any
+if (envParams.PROXY_MUSIC_ADDRESS) global.lx.config['proxy.music.address'] = envParams.PROXY_MUSIC_ADDRESS
+if (envParams.PROXY_CUSTOM_SOURCE_MODE) global.lx.config['proxy.customSource.mode'] = envParams.PROXY_CUSTOM_SOURCE_MODE as any
+if (envParams.PROXY_CUSTOM_SOURCE_ADDRESS) global.lx.config['proxy.customSource.address'] = envParams.PROXY_CUSTOM_SOURCE_ADDRESS
+if (envParams.PROXY_APP_MODE) global.lx.config['proxy.app.mode'] = envParams.PROXY_APP_MODE as any
+if (envParams.PROXY_APP_ADDRESS) global.lx.config['proxy.app.address'] = envParams.PROXY_APP_ADDRESS
+if (envParams.ENABLE_DEBUG !== undefined) global.lx.config['debug.enabled'] = envParams.ENABLE_DEBUG === 'true'
+if (envParams.CONFIG_BACKUP_ENABLE !== undefined) global.lx.config['configBackup.enable'] = envParams.CONFIG_BACKUP_ENABLE === 'true'
+if (envParams.CONFIG_BACKUP_RETENTION_DAYS) {
+  const days = parseInt(envParams.CONFIG_BACKUP_RETENTION_DAYS, 10)
+  if (Number.isFinite(days) && days > 0) global.lx.config['configBackup.retentionDays'] = days
+}
+if (envParams.CONFIG_BACKUP_DIR) global.lx.config['configBackup.dir'] = envParams.CONFIG_BACKUP_DIR
+if (envParams.SNAPSHOT_BACKUP_PATH !== undefined) global.lx.config['snapshot.backupPath'] = envParams.SNAPSHOT_BACKUP_PATH
 if (envParams.SUBSONIC_ENABLE !== undefined) {
   global.lx.config['subsonic.enable'] = envParams.SUBSONIC_ENABLE === 'true'
 }
 if (envParams.SUBSONIC_PATH !== undefined) {
   global.lx.config['subsonic.path'] = envParams.SUBSONIC_PATH
+}
+if (envParams.SUBSONIC_PORT !== undefined) {
+  const subsonicPort = parseInt(envParams.SUBSONIC_PORT, 10)
+  if (Number.isFinite(subsonicPort) && subsonicPort >= 0) global.lx.config['subsonic.port'] = subsonicPort
 }
 if (envParams.SINGER_SOURCE_PRIORITY !== undefined) {
   const priority = envParams.SINGER_SOURCE_PRIORITY.split(',').filter(s => s === 'tx' || s === 'wy') as Array<'tx' | 'wy'>
@@ -465,6 +484,7 @@ global.lx.webdavSync = webdavSync
 
 // 启动前最后保存一次合并后的配置，确保环境变量被固化到 config.js 中
 saveConfigToFile()
+startConfigBackup()
 
 startServer(global.lx.config.port, global.lx.config.bindIP)
 

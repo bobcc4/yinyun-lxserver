@@ -149,6 +149,21 @@ declare namespace LX {
      */
     'proxy.all.address'?: string
 
+    /** 分类出站代理策略：inherit | direct | custom */
+    'proxy.music.mode'?: 'inherit' | 'direct' | 'custom'
+    'proxy.music.address'?: string
+    'proxy.customSource.mode'?: 'inherit' | 'direct' | 'custom'
+    'proxy.customSource.address'?: string
+    'proxy.app.mode'?: 'inherit' | 'direct' | 'custom'
+    'proxy.app.address'?: string
+
+    /** 是否输出自定义源调试日志 */
+    'debug.enabled'?: boolean
+    'configBackup.enable'?: boolean
+    'configBackup.retentionDays'?: number
+    'configBackup.dir'?: string
+    'snapshot.backupPath'?: string
+
     /**
      * 是否禁用数据收集
      */
@@ -163,6 +178,9 @@ declare namespace LX {
      * Subsonic 访问路径 (默认 /rest)
      */
     'subsonic.path'?: string
+
+    /** Subsonic 独立监听端口，0 表示关闭 */
+    'subsonic.port'?: number
 
     /**
      * 是否开启 Subsonic 调试日志模式 (默认 false/true)

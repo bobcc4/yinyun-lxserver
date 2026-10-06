@@ -2,6 +2,9 @@
 .github
 .gitignore
 node_modules
+**/node_modules
+.agents
+.electron-test
 data
 logs
 lx-music-desktop-master
@@ -9,6 +12,7 @@ lx-music-desktop-master
 .tmp-*
 dist-electron
 test-results
+docs/.vitepress/cache
 server
 cache
 cover_cache

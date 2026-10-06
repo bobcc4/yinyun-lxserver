@@ -77,6 +77,27 @@ export class SnapshotDataManage {
     }
   }
 
+  updateSnapshotDir = (configuredPath?: string) => {
+    const configured = String(configuredPath ?? global.lx.config['snapshot.backupPath'] ?? '').trim()
+    const target = configured
+      ? path.join(path.isAbsolute(configured) ? configured : path.join(global.lx.dataPath, configured), this.userDataManage.userName, File.dislikeSnapshotDir)
+      : path.join(this.dislikeDir, File.dislikeSnapshotDir)
+    checkAndCreateDirSync(target)
+    if (path.resolve(target) !== path.resolve(this.snapshotDir) && fs.existsSync(this.snapshotDir)) {
+      for (const name of fs.readdirSync(this.snapshotDir)) {
+        const source = path.join(this.snapshotDir, name)
+        const destination = path.join(target, name)
+        if (!fs.existsSync(destination)) {
+          try { fs.renameSync(source, destination) } catch {
+            fs.copyFileSync(source, destination)
+            fs.unlinkSync(source)
+          }
+        }
+      }
+    }
+    this.snapshotDir = target
+  }
+
 
   constructor(userDataManage: UserDataManage) {
     this.userDataManage = userDataManage
@@ -86,6 +107,7 @@ export class SnapshotDataManage {
 
     this.snapshotDir = path.join(this.dislikeDir, File.dislikeSnapshotDir)
     checkAndCreateDirSync(this.snapshotDir)
+    this.updateSnapshotDir()
 
     this.snapshotInfoFilePath = path.join(this.dislikeDir, File.dislikeSnapshotInfoJSON)
     this.snapshotInfo = fs.existsSync(this.snapshotInfoFilePath)

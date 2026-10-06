@@ -10794,6 +10794,16 @@ async function renderCustomSources() {
             const vmTag = source.allowUnsafeVM ?
                 `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-50 text-red-500 border border-red-100 dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/30">VM</span>` : '';
 
+            const sourceUpdate = window.customSourceUpdateAlerts?.[source.id] || source.updateAlert;
+            const updateUrl = sourceUpdate?.updateUrl && /^https?:\/\//i.test(sourceUpdate.updateUrl)
+                ? sourceUpdate.updateUrl
+                : '';
+            const updateNotice = sourceUpdate ? `
+                <div class="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                    <span><i class="fas fa-arrow-circle-up mr-1"></i>${escapeHtmlText(sourceUpdate.log || '检测到音源有更新')}</span>
+                    ${updateUrl ? `<a href="${escapeHtmlText(updateUrl)}" target="_blank" rel="noopener noreferrer" class="font-semibold underline">查看更新</a>` : ''}
+                </div>` : '';
+
             const currentUsername = (localStorage.getItem('lx_sync_user') || '').trim().toLowerCase();
             const isAdmin = !!localStorage.getItem('lx_admin_password');
             const canManageSource = isUser && !source.readOnly;
@@ -10811,6 +10821,7 @@ async function renderCustomSources() {
                         ${vmTag}
                     </div>
                     ${errorMsg}
+                    ${updateNotice}
                     <div class="flex flex-wrap items-center text-[10px] t-text-muted gap-x-3 gap-y-1 mt-1.5">
                         <span class="flex items-center"><i class="fas fa-user mr-1 opacity-70"></i>${source.author || '未知'}</span>
                         <span class="flex items-center"><i class="far fa-hdd mr-1 opacity-70"></i>${size}</span>
@@ -10832,6 +10843,12 @@ async function renderCustomSources() {
                     </button>
                     
                     <div class="flex items-center gap-1">
+                        ${canManageSource && source.sourceUrl ? `
+                        <button onclick="checkCustomSourceUpdate('${source.id}')"
+                                class="p-1.5 t-text-muted hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
+                                title="检查音源更新">
+                            <i class="fas fa-cloud-download-alt text-sm"></i>
+                        </button>` : ''}
                         ${source.enabled && source.status === 'failed' && canManageSource ? `
                         <button onclick="reloadSource('${source.id}')" 
                                 class="p-1.5 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 rounded-lg transition-colors"
@@ -10964,6 +10981,35 @@ async function renderCustomSources() {
 
     if (typeof applyMarqueeChecks === 'function') {
         applyMarqueeChecks();
+    }
+}
+
+async function checkCustomSourceUpdate(sourceId) {
+    try {
+        const username = localStorage.getItem('lx_sync_user') || '';
+        if (!isUserLoggedIn() || !username) throw new Error('请先登录同步账户');
+        const headers = { 'Content-Type': 'application/json', ...getUserAuthHeaders() };
+        const adminPass = localStorage.getItem('lx_admin_password');
+        if (adminPass) headers['x-frontend-auth'] = adminPass;
+        const response = await fetch('/api/v1/player/custom-source/check-update', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ username, sourceId })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || `HTTP ${response.status}`);
+        window.customSourceUpdateAlerts = window.customSourceUpdateAlerts || {};
+        if (result.available) {
+            window.customSourceUpdateAlerts[sourceId] = result.updateAlert || { log: '检测到音源有更新' };
+            showInfo('检测到音源更新，已在音源卡片中显示');
+        } else {
+            delete window.customSourceUpdateAlerts[sourceId];
+            showSuccess('当前音源已是最新版本');
+        }
+        await renderCustomSources();
+    } catch (error) {
+        console.error('[CustomSource] Check update failed:', error);
+        showError(`检查音源更新失败: ${error.message}`);
     }
 }
 

@@ -74,7 +74,17 @@ WebDAV 密码建议使用服务商提供的应用专用密码。恢复操作会�
 | --- | --- | --- | --- |
 | `PROXY_ALL_ENABLED` | `proxy.all.enabled` | `false` | 服务端外发请求使用代理 |
 | `PROXY_ALL_ADDRESS` | `proxy.all.address` | 空 | HTTP 或 SOCKS5 代理地址 |
+| `PROXY_MUSIC_MODE` / `PROXY_MUSIC_ADDRESS` | `proxy.music.*` | `inherit` / 空 | 内置音乐平台请求的代理策略和独立地址 |
+| `PROXY_CUSTOM_SOURCE_MODE` / `PROXY_CUSTOM_SOURCE_ADDRESS` | `proxy.customSource.*` | `inherit` / 空 | 自定义音源脚本请求的代理策略和独立地址 |
+| `PROXY_APP_MODE` / `PROXY_APP_ADDRESS` | `proxy.app.*` | `inherit` / 空 | 应用功能请求的代理策略和独立地址 |
+| `ENABLE_DEBUG` | `debug.enabled` | `false` | 自定义音源普通日志开关；错误日志始终保留 |
+| `CONFIG_BACKUP_ENABLE` | `configBackup.enable` | `true` | 每日自动备份服务配置 |
+| `CONFIG_BACKUP_RETENTION_DAYS` | `configBackup.retentionDays` | `7` | 配置备份保留天数 |
+| `CONFIG_BACKUP_DIR` | `configBackup.dir` | `backups` | 配置备份目录；相对路径基于数据目录 |
+| `SNAPSHOT_BACKUP_PATH` | `snapshot.backupPath` | 空 | 歌单及不喜欢规则快照目录；相对路径基于数据目录 |
 | `DISABLE_TELEMETRY` | `disableTelemetry` | `false` | 禁用匿名统计及相关远程通知 |
+
+分类代理支持 `inherit`（继承全局代理）、`direct`（直连）和 `custom`（使用分类独立地址）。未指定分类配置时保持原全局代理行为；选择直连时不会回退到环境变量代理。
 
 Docker 容器中的 `127.0.0.1` 不等于 NAS 主机。代理位于主机时使用容器可访问的主机地址。
 
@@ -84,6 +94,9 @@ Docker 容器中的 `127.0.0.1` 不等于 NAS 主机。代理位于主机时使�
 | --- | --- | --- |
 | `SUBSONIC_ENABLE` | `subsonic.enable` | `true` |
 | `SUBSONIC_PATH` | `subsonic.path` | `/rest` |
+| `SUBSONIC_PORT` | `subsonic.port` | `0` | 独立 Subsonic 端口；`0` 表示与主服务共用端口 |
+
+启用独立端口后，该端口只处理配置的 Subsonic 路径，其余路径返回 404。请在防火墙和反向代理中只向客户端开放需要的端口。
 
 以下高级项当前通过 `config.js` 或后台配置：
 

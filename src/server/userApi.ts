@@ -8,6 +8,7 @@ import * as zlib from 'zlib'
 import { promisify } from 'util'
 
 import * as tunnel from 'tunnel'
+import { getProxyAgent } from '@/modules/utils/proxy.js'
 import { tryNormalizeUsername } from '@/utils/username'
 import { isSourceSharedWithUser } from './customSourceSharing'
 import { isSourcePlatformEnabled } from './customSourcePlatformPreferences'
@@ -152,6 +153,16 @@ interface UserApiInfo {
     allowUnsafeVM?: boolean
 }
 
+export interface ApiStatusInfo {
+    status: 'success' | 'failed'
+    error?: string
+    updateAlert?: {
+        name?: string
+        log?: string
+        updateUrl?: string
+    }
+}
+
 // 加载的 API 实例
 const loadedApis = new Map<string, any>()
 const isConfiguredOwner = (username?: string): username is string => {
@@ -160,7 +171,7 @@ const isConfiguredOwner = (username?: string): username is string => {
 }
 
 // API 初始化状态追踪 map<id, status>
-const apiStatus = new Map<string, { status: 'success' | 'failed', error?: string }>()
+const apiStatus = new Map<string, ApiStatusInfo>()
 
 export function getApiStatus(owner: string, id: string) {
     const normalizedOwner = tryNormalizeUsername(owner)
@@ -202,7 +213,12 @@ export function extractMetadata(script: string): Partial<UserApiInfo> {
 }
 
 // 创建 lx.request 包装器（使用 needle）
-function createLxRequest(isUnsafe: boolean = false) {
+async function createLxRequest(
+    isUnsafe: boolean = false,
+    onSniffUpdate?: (alert: { name?: string, log?: string, updateUrl?: string }) => void,
+) {
+    const agentHttps = await getProxyAgent('https://lx-proxy-probe.invalid', 'customSource')
+    const agentHttp = agentHttps ? await getProxyAgent('http://lx-probe.invalid', 'customSource') : undefined
     return (url: string, options: any, callback: Function) => {
         const safeOptions = decontextify(options || {})
         const { method = 'get', timeout, headers, body, form, formData } = safeOptions
@@ -211,6 +227,8 @@ function createLxRequest(isUnsafe: boolean = false) {
             headers,
             response_timeout: typeof timeout === 'number' && timeout > 0 ? Math.min(timeout, 60000) : 60000
         }
+        const agent = /^https:/i.test(url) ? agentHttps : agentHttp
+        if (agent) requestOptions.agent = agent
 
         let data = body
         if (form) {
@@ -231,6 +249,15 @@ function createLxRequest(isUnsafe: boolean = false) {
                         try {
                             parsedBody = JSON.parse(body)
                         } catch { }
+                    }
+
+                    if (onSniffUpdate && parsedBody && typeof parsedBody === 'object') {
+                        const targetData = parsedBody.data || parsedBody
+                        const updateMsg = targetData.updateMsg || targetData.log || targetData.updateLog || targetData.msg
+                        const updateUrl = targetData.updateUrl || targetData.url || targetData.downloadUrl
+                        if (updateMsg && (updateUrl || (typeof updateMsg === 'string' && /更新|update/i.test(updateMsg)))) {
+                            onSniffUpdate({ log: String(updateMsg), updateUrl: updateUrl ? String(updateUrl) : '' })
+                        }
                     }
 
                     let safeResp: any = {
@@ -336,7 +363,18 @@ export async function loadUserApi(apiInfo: UserApiInfo, register = true): Promis
     const lxObject = {
         ...lxDataInside,
         utils: lxUtils,
-        request: createLxRequest(!!apiInfo.allowUnsafeVM && !!global.lx.config['system.allowUnsafeVM']),
+        request: await createLxRequest(
+            !!apiInfo.allowUnsafeVM && !!global.lx.config['system.allowUnsafeVM'],
+            (alert) => {
+                const currentStatus = apiStatus.get(`${fullApiInfo.owner}_${fullApiInfo.id}`) || { status: 'success' as const }
+                currentStatus.updateAlert = {
+                    name: alert.name || fullApiInfo.name,
+                    log: alert.log,
+                    updateUrl: alert.updateUrl,
+                }
+                apiStatus.set(`${fullApiInfo.owner}_${fullApiInfo.id}`, currentStatus)
+            },
+        ),
         send: (eventName: string, data: any) => {
             const dData = decontextify(data)
             // console.log(`[UserApi-${fullApiInfo.name}] send:`, eventName)
@@ -348,6 +386,14 @@ export async function loadUserApi(apiInfo: UserApiInfo, register = true): Promis
                 if (initResolve) initResolve()
             } else if (eventName === 'updateAlert') {
                 const error = new Error(`发现新版本,需要更新: ${JSON.stringify(dData)}`)
+                const errorAny: any = error
+                errorAny.updateAlert = typeof dData === 'object' && dData !== null
+                    ? {
+                        name: dData.name || fullApiInfo.name,
+                        log: dData.log || dData.updateMsg || dData.updateLog || dData.msg || '',
+                        updateUrl: dData.updateUrl || dData.url || dData.downloadUrl || '',
+                    }
+                    : { name: fullApiInfo.name, log: String(dData || ''), updateUrl: '' }
                 if (initReject) initReject(error)
             }
         },
@@ -360,6 +406,17 @@ export async function loadUserApi(apiInfo: UserApiInfo, register = true): Promis
     }
 
     // 完整沙箱环境
+    const sandboxConsole = {
+        log: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.log(...args) },
+        info: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.info(...args) },
+        debug: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.debug(...args) },
+        warn: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.warn(...args) },
+        error: (...args: any[]) => console.error.apply(console, args),
+        time: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.time(String(args[0] || 'default')) },
+        timeEnd: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.timeEnd(String(args[0] || 'default')) },
+        group: (...args: any[]) => { if (global.lx.config['debug.enabled']) console.group?.(String(args[0] || '')) },
+        groupEnd: () => { if (global.lx.config['debug.enabled']) console.groupEnd?.() },
+    }
     const sandbox: any = {
         // console: {
         //     log: () => { }, // 静默脚本内部的普通日志
@@ -370,7 +427,7 @@ export async function loadUserApi(apiInfo: UserApiInfo, register = true): Promis
         //     time: console.time,
         //     timeEnd: console.timeEnd
         // },
-        console,
+        console: sandboxConsole,
         setTimeout,
         clearTimeout,
         setInterval,
@@ -468,7 +525,7 @@ export async function loadUserApi(apiInfo: UserApiInfo, register = true): Promis
         }
         // 返回详细错误信息而不是直接抛出
         const isRequireUnsafe = !apiInfo.allowUnsafeVM && (error.message === 'REQUIRE_UNSAFE_VM' || error.message.includes('初始化超时') || error.message.includes('timeout'))
-        return { success: false, apiInstance: null, error: error.message, requireUnsafe: isRequireUnsafe }
+        return { success: false, apiInstance: null, error: error.message, requireUnsafe: isRequireUnsafe, updateAlert: error.updateAlert }
     }
 }
 

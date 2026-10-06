@@ -54,6 +54,8 @@ type DownloadResolver = (task: ServerDownloadTask) => Promise<ResolveResult>
 
 const DEFAULT_CONCURRENT = 3
 const MAX_CONCURRENT_PER_USER = 5
+const RESOLVE_TIMEOUT_MS = 120_000
+const DOWNLOAD_TIMEOUT_MS = 30 * 60_000
 const tasks = new Map<string, ServerDownloadTask>()
 const controllers = new Map<string, AbortController>()
 const concurrencyByUser = new Map<string, number>()
@@ -82,6 +84,17 @@ const normalizeConcurrency = (value: unknown) => {
   if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENT
   return Math.min(MAX_CONCURRENT_PER_USER, Math.max(1, parsed))
 }
+
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, message: string) => new Promise<T>((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+  promise.then(value => {
+    clearTimeout(timer)
+    resolve(value)
+  }, error => {
+    clearTimeout(timer)
+    reject(error)
+  })
+})
 
 export const getConcurrency = (username: string) => {
   const normalized = tryNormalizeUsername(username)
@@ -211,7 +224,7 @@ const runTask = async (task: ServerDownloadTask) => {
   scheduleSave()
 
   try {
-    const resolved = await resolver(task)
+    const resolved = await withTimeout(resolver(task), RESOLVE_TIMEOUT_MS, '音源解析超时，任务已释放并继续处理队列')
     if (controller.signal.aborted) return
     if (!resolved?.url) throw new Error('无法解析下载地址')
     task.songInfo = resolved.songInfo || task.songInfo
@@ -220,7 +233,7 @@ const runTask = async (task: ServerDownloadTask) => {
     task.updatedAt = Date.now()
     scheduleSave()
 
-    await fileCache.downloadAndCache(task.songInfo, resolved.url, task.quality, task.username, controller.signal,
+    await withTimeout(fileCache.downloadAndCache(task.songInfo, resolved.url, task.quality, task.username, controller.signal,
       task.enableOnlyDownloadMode, task.cacheLyric, task.embedLyric, {
         requestedSource: resolved.requestedSource,
         downloadSource: resolved.downloadSource,
@@ -228,7 +241,7 @@ const runTask = async (task: ServerDownloadTask) => {
       }, {
         sidecarFormat: task.sidecarLyricFormat,
         embedFormat: task.embedLyricFormat,
-      })
+      }), DOWNLOAD_TIMEOUT_MS, '下载超时，任务已中止并继续处理队列')
 
     if (controller.signal.aborted) return
     const progress = fileCache.cacheProgress.get(task.activeSongKey)
@@ -239,6 +252,9 @@ const runTask = async (task: ServerDownloadTask) => {
     task.speed = 0
     task.errorMsg = ''
   } catch (err: any) {
+    if (err?.message === '音源解析超时，任务已释放并继续处理队列' || err?.message === '下载超时，任务已中止并继续处理队列') {
+      controller.abort()
+    }
     if (controller.signal.aborted || err?.message === 'Aborted') {
       task.status = 'paused'
       task.errorMsg = '已暂停'

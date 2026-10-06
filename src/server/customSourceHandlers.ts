@@ -16,6 +16,7 @@ import {
     removeSourcePlatformPreferences,
     setEnabledSourcePlatforms,
 } from './customSourcePlatformPreferences'
+import { getProxyAgent } from '@/modules/utils/proxy.js'
 
 interface StoredSource {
     id: string
@@ -349,8 +350,9 @@ const downloadScript = async (targetUrl: string, depth = 0): Promise<string> => 
         throw new Error('Only HTTP and HTTPS URLs are supported')
     }
     const protocol = parsedUrl.protocol === 'https:' ? require('https') : require('http')
+    const agent = await getProxyAgent(parsedUrl.toString(), 'customSource')
     return new Promise((resolve, reject) => {
-        protocol.get(parsedUrl, (response: any) => {
+        const request = protocol.get(parsedUrl, { agent }, (response: any) => {
             const statusCode = Number(response.statusCode || 0)
             if (statusCode >= 300 && statusCode < 400 && response.headers.location) {
                 response.resume()
@@ -366,8 +368,44 @@ const downloadScript = async (targetUrl: string, depth = 0): Promise<string> => 
             response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)))
             response.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
             response.on('error', reject)
-        }).on('error', reject)
+        })
+        request.setTimeout(15000, () => request.destroy(new Error('音源请求超时')))
+        request.on('error', reject)
     })
+}
+
+export async function handleCheckUpdate(req: IncomingMessage, res: ServerResponse, username: string) {
+    try {
+        const owner = assertUsername(username)
+        const { id, sourceId } = JSON.parse(await readBody(req))
+        const targetId = id || sourceId
+        const source = readSources(owner).find(item => item.id === targetId)
+        if (!source) throw new Error('Source not found')
+        if (!source.sourceUrl) {
+            sendJson(res, 200, { success: true, available: false, message: '该音源没有可检查的远程地址' })
+            return
+        }
+        const remoteUrl = new URL(source.sourceUrl)
+        if (!['http:', 'https:'].includes(remoteUrl.protocol)) throw new Error('只允许检查 HTTP/HTTPS 音源地址')
+        const content = await downloadScript(remoteUrl.toString())
+        const remoteMeta = extractMetadata(content)
+        const currentScriptPath = path.join(getSourceDir(owner), source.id)
+        const currentContent = fs.existsSync(currentScriptPath) ? fs.readFileSync(currentScriptPath, 'utf-8') : ''
+        const available = content !== currentContent || (remoteMeta.version !== undefined && String(remoteMeta.version) !== String(source.version))
+        const status = getApiStatus(owner, source.id)
+        if (available) {
+            const updateAlert = {
+                name: String(remoteMeta.name || source.name),
+                log: `检测到远程音源${remoteMeta.version ? ` v${remoteMeta.version}` : ''}，当前版本为 v${source.version}`,
+                updateUrl: source.sourceUrl,
+            }
+            sendJson(res, 200, { success: true, available: true, updateAlert, remoteMetadata: remoteMeta, status: status?.status })
+            return
+        }
+        sendJson(res, 200, { success: true, available: false, status: status?.status })
+    } catch (error: any) {
+        sendJson(res, 400, { success: false, error: error.message })
+    }
 }
 
 export async function handleValidate(req: IncomingMessage, res: ServerResponse, username: string) {
@@ -441,7 +479,7 @@ export async function handleList(_req: IncomingMessage, res: ServerResponse, use
                 readOnly: false,
                 sharedUsers,
                 sharedToAll: sharedUsers.includes('*'),
-                ...(status ? { status: status.status, error: status.error } : {}),
+                ...(status ? { status: status.status, error: status.error, updateAlert: status.updateAlert } : {}),
             }
         })
         const sharedSources = shares
@@ -460,7 +498,7 @@ export async function handleList(_req: IncomingMessage, res: ServerResponse, use
                     sharedBy: share.owner,
                     sharedUsers: [],
                     sharedToAll: share.targetUsers.includes('*'),
-                    ...(status ? { status: status.status, error: status.error } : {}),
+                    ...(status ? { status: status.status, error: status.error, updateAlert: status.updateAlert } : {}),
                 }]
             })
         const sources = [...ownSources, ...sharedSources]

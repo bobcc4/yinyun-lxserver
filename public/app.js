@@ -38,6 +38,7 @@ class App {
         this.systemMemHistory = [];
         this.processMemHistory = [];
         this.monitorTimer = null;
+        this.logsRefreshTimer = null;
         this.init();
         this.initVersion();
     }
@@ -135,6 +136,7 @@ class App {
         // 日志查看
         document.getElementById('refresh-logs-btn')?.addEventListener('click', () => this.loadLogs());
         document.getElementById('log-type-select')?.addEventListener('change', () => this.loadLogs());
+        document.getElementById('logs-auto-refresh')?.addEventListener('change', (event) => this.toggleLogsAutoRefresh(event.target.checked));
 
         // 模态框
         document.querySelector('.modal-close')?.addEventListener('click', () => this.closeModal());
@@ -254,6 +256,10 @@ class App {
     }
 
     async switchView(viewName) {
+        if (this.logsRefreshTimer) {
+            clearInterval(this.logsRefreshTimer);
+            this.logsRefreshTimer = null;
+        }
         // 更新导航状态
         document.querySelectorAll('.nav-item').forEach(item => {
             item.classList.toggle('active', item.dataset.view === viewName);
@@ -279,6 +285,9 @@ class App {
         document.getElementById('page-title').textContent = titles[viewName] || viewName;
 
         this.currentView = viewName;
+        if (viewName === 'logs' && document.getElementById('logs-auto-refresh')?.checked) {
+            this.toggleLogsAutoRefresh(true);
+        }
 
         // 加载对应数据
         switch (viewName) {
@@ -1718,6 +1727,17 @@ class App {
             if (form.elements['proxy.all.address']) {
                 form.elements['proxy.all.address'].value = config['proxy.all.address'] || '';
             }
+            ['music', 'customSource', 'app'].forEach(category => {
+                const mode = form.elements[`proxy.${category}.mode`];
+                const address = form.elements[`proxy.${category}.address`];
+                if (mode) mode.value = config[`proxy.${category}.mode`] || 'inherit';
+                if (address) address.value = config[`proxy.${category}.address`] || '';
+            });
+            if (form.elements['debug.enabled']) form.elements['debug.enabled'].checked = config['debug.enabled'] === true;
+            if (form.elements['configBackup.enable']) form.elements['configBackup.enable'].checked = config['configBackup.enable'] !== false;
+            if (form.elements['configBackup.retentionDays']) form.elements['configBackup.retentionDays'].value = config['configBackup.retentionDays'] || 7;
+            if (form.elements['configBackup.dir']) form.elements['configBackup.dir'].value = config['configBackup.dir'] || '';
+            if (form.elements['snapshot.backupPath']) form.elements['snapshot.backupPath'].value = config['snapshot.backupPath'] || '';
             if (form.elements['user.enableLoginCacheRestriction']) {
                 form.elements['user.enableLoginCacheRestriction'].checked = config['user.enableLoginCacheRestriction'] === true;
             }
@@ -1778,6 +1798,7 @@ class App {
             if (form.elements['subsonic.path']) {
                 form.elements['subsonic.path'].value = config['subsonic.path'] || '/rest';
             }
+            if (form.elements['subsonic.port']) form.elements['subsonic.port'].value = config['subsonic.port'] || 0;
             if (form.elements['subsonic.enableDebug']) {
                 form.elements['subsonic.enableDebug'].checked = config['subsonic.enableDebug'] === true;
             }
@@ -1923,6 +1944,17 @@ class App {
             'proxy.header': formData.get('proxy.header'),
             'proxy.all.enabled': formData.get('proxy.all.enabled') === 'on',
             'proxy.all.address': formData.get('proxy.all.address'),
+            'proxy.music.mode': formData.get('proxy.music.mode') || 'inherit',
+            'proxy.music.address': (formData.get('proxy.music.address') || '').trim(),
+            'proxy.customSource.mode': formData.get('proxy.customSource.mode') || 'inherit',
+            'proxy.customSource.address': (formData.get('proxy.customSource.address') || '').trim(),
+            'proxy.app.mode': formData.get('proxy.app.mode') || 'inherit',
+            'proxy.app.address': (formData.get('proxy.app.address') || '').trim(),
+            'debug.enabled': formData.get('debug.enabled') === 'on',
+            'configBackup.enable': formData.get('configBackup.enable') === 'on',
+            'configBackup.retentionDays': parseInt(formData.get('configBackup.retentionDays')) || 7,
+            'configBackup.dir': (formData.get('configBackup.dir') || '').trim(),
+            'snapshot.backupPath': (formData.get('snapshot.backupPath') || '').trim(),
             'user.enableLoginCacheRestriction': formData.get('user.enableLoginCacheRestriction') === 'on',
             'user.enableCacheSizeLimit': formData.get('user.enableCacheSizeLimit') === 'on',
             'user.cacheSizeLimit': parseInt(formData.get('user.cacheSizeLimit')) || 2000,
@@ -1939,6 +1971,7 @@ class App {
             'sync.backupInterval': parseInt(formData.get('sync.backupInterval')) || 24,
             'subsonic.enable': formData.get('subsonic.enable') === 'on',
             'subsonic.path': (formData.get('subsonic.path') || '').trim() || '/rest',
+            'subsonic.port': parseInt(formData.get('subsonic.port')) || 0,
             'subsonic.enableDebug': formData.get('subsonic.enableDebug') === 'on',
             'subsonic.onlineSearch': formData.get('subsonic.onlineSearch') === 'on',
             'subsonic.onlineSearchMode': formData.get('subsonic.onlineSearchMode') || 'fallback',
@@ -1998,6 +2031,14 @@ class App {
             }
         } catch (err) {
             document.getElementById('logs-content').innerHTML = '<p style="color: var(--accent-error);">加载日志失败</p>';
+        }
+    }
+
+    toggleLogsAutoRefresh(enabled) {
+        if (this.logsRefreshTimer) clearInterval(this.logsRefreshTimer);
+        this.logsRefreshTimer = null;
+        if (enabled && this.currentView === 'logs') {
+            this.logsRefreshTimer = setInterval(() => this.loadLogs(), 5000);
         }
     }
 
