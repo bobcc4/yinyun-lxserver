@@ -84,6 +84,29 @@ test('fixed default storage still discovers nested music in the legacy data loca
   assert.equal(fs.existsSync(path.join(root, 'music', 'legacy', 'artist', 'album', 'retained.wav')), false)
 })
 
+test('uses configured cache and download roots without changing data storage', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yinyun-cache-root-'))
+  const musicRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yinyun-music-root-'))
+  const previousCachePath = process.env.CACHE_PATH
+  const previousMusicPath = process.env.MUSIC_PATH
+
+  try {
+    process.env.CACHE_PATH = cacheRoot
+    process.env.MUSIC_PATH = musicRoot
+    assert.equal(fileCache.getCacheDir('paths', false), path.join(cacheRoot, 'paths'))
+    assert.equal(fileCache.getCacheDir('paths', true), path.join(musicRoot, 'paths'))
+    assert.equal(fileCache.getCoverCacheDir('paths'), path.join(cacheRoot, 'cover_cache', 'paths'))
+    assert.equal(fileCache.getCacheDir('paths', false, 'data'), path.join(root, 'data', 'cache', 'paths'))
+  } finally {
+    if (previousCachePath === undefined) delete process.env.CACHE_PATH
+    else process.env.CACHE_PATH = previousCachePath
+    if (previousMusicPath === undefined) delete process.env.MUSIC_PATH
+    else process.env.MUSIC_PATH = previousMusicPath
+    fs.rmSync(cacheRoot, { recursive: true, force: true })
+    fs.rmSync(musicRoot, { recursive: true, force: true })
+  }
+})
+
 test('deleting a legacy-location file leaves its root-location namesake intact', async () => {
   const filename = 'same-name.wav'
   const rootDir = fileCache.getCacheDir('legacy-delete', true, 'root')

@@ -214,6 +214,16 @@ docker compose up -d
 
 升级容器不会删除已挂载目录。请始终保留 `/server/data`、`/server/logs`、`/server/cache` 和 `/server/music` 的持久化挂载。
 
+### Windows 服务端安装包
+
+Windows 服务端安装包会在首次启动时选择数据和日志存储位置。缓存目录和下载目录可以从托盘菜单 **设置与管理** 中分别选择；选择后重启服务端生效，也可以选择迁移已有文件。
+
+- 缓存目录：保存播放缓存和封面缓存。
+- 下载目录：保存下载到本地曲库的歌曲及歌词。
+- 数据和日志目录：保存账户、歌单、设置、快照和日志。
+
+缓存目录与下载目录可以放在不同磁盘，建议选择有足够空间且权限稳定的文件夹。Windows 客户端是连接 NAS 的独立播放器，不使用这里的 Windows 服务端目录设置。
+
 ### 方式三：直接运行 (Git Clone)
 
 ```bash
@@ -267,6 +277,8 @@ npm start
 | `CONFIG_PATH`                         | -                                    | 服务端配置文件路径；Docker 建议使用 `/server/data/config.js`       | `<DATA_PATH>/config.js` |
 | `DATA_PATH`                           | -                                    | 指定数据存储目录的绝对路径                                         | `./data`         |
 | `LOG_PATH`                            | -                                    | 指定日志输出目录的绝对路径                                         | `./logs`         |
+| `CACHE_PATH`                          | -                                    | 指定缓存目录；Windows 服务端由托盘设置写入，Docker 可直接设置         | `./cache`        |
+| `MUSIC_PATH`                          | -                                    | 指定下载目录；Windows 服务端由托盘设置写入，Docker 可直接设置         | `./music`        |
 | `PROXY_HEADER`                        | `proxy.header`                     | 代理转发 IP 头 (如 `x-real-ip`)                                  | -                  |
 | `WEBDAV_ENABLE`                       | `webdav.enable`                    | 是否启用 WebDAV 同步与备份                                         | `false`          |
 | `WEBDAV_URL`                          | `webdav.url`                       | WebDAV 地址                                                        | -                  |

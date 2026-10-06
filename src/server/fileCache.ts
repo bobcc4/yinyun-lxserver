@@ -89,6 +89,12 @@ const normalizeCacheUsername = (username?: string) => {
     }
 }
 
+const getConfiguredRoot = (folderName: 'cache' | 'music') => {
+    const envKey = folderName === 'cache' ? 'CACHE_PATH' : 'MUSIC_PATH'
+    const configured = String(process.env[envKey] || '').trim()
+    return configured ? path.resolve(configured) : path.join(process.cwd(), folderName)
+}
+
 // Helper to get actual directory path
 // [Unified Enhancement] Cache Progress Tracker
 export const cacheProgress: Map<string, { progress: number; status: string; total?: number; received?: number; speed?: number; updatedAt?: number; errorMsg?: string }> = new Map()
@@ -127,7 +133,7 @@ export const getCacheDir = (username?: string, isOnlyDownload?: boolean, locatio
     if (loc === CACHE_ROOTS.DATA) {
         baseDir = path.join(global.lx.dataPath, folderName)
     } else {
-        baseDir = path.join(process.cwd(), folderName)
+        baseDir = getConfiguredRoot(folderName)
     }
 
     // [New] Segment cache by username
@@ -139,7 +145,7 @@ export const getCacheDir = (username?: string, isOnlyDownload?: boolean, locatio
 }
 
 export const getCoverCacheDir = (username: string) => {
-    const baseDir = path.join(process.cwd(), 'cover_cache')
+    const baseDir = path.join(getConfiguredRoot('cache'), 'cover_cache')
     const userDirName = normalizeCacheUsername(username)
     const fullPath = path.join(baseDir, userDirName)
     if (!fs.existsSync(fullPath)) {
@@ -238,7 +244,7 @@ class CacheIndexManager {
         if (loc === CACHE_ROOTS.DATA) {
             baseDir = path.join(global.lx.dataPath, folderName)
         } else {
-            baseDir = path.join(process.cwd(), folderName)
+            baseDir = getConfiguredRoot(folderName)
         }
 
         const userDirName = normalizeCacheUsername(username)

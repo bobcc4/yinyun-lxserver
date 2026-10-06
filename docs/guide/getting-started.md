@@ -60,6 +60,10 @@ docker compose up -d
 
 升级容器不会删除已挂载目录。不要在未确认挂载正确前删除旧容器数据。
 
+## Windows 服务端安装包
+
+GitHub Release 同时提供 Windows 服务端安装包。首次启动时选择数据和日志目录；运行后可从托盘菜单 **设置与管理** 分别设置缓存目录和下载目录，并选择是否迁移已有文件。两个目录可以位于不同磁盘，修改后需要重启服务端。
+
 ## Windows 客户端
 
 服务端部署完成后，可从 [Windows 客户端 Releases](https://github.com/bobcc4/yinyun-windows/releases/latest) 下载安装包。客户端只连接 NAS 服务端，不在电脑上启动第二套服务器；详细说明见[Windows 客户端](/guide/desktop)。

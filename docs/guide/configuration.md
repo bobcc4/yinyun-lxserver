@@ -25,8 +25,12 @@ V1 可以通过环境变量、外部配置文件、项目根目录 `config.js` �
 | `CONFIG_PATH` | - | `<DATA_PATH>/config.js` | 服务端配置文件路径；Docker 建议使用 `/server/data/config.js` |
 | `DATA_PATH` | - | `./data` | 服务数据目录 |
 | `LOG_PATH` | - | `./logs` | 日志目录 |
+| `CACHE_PATH` | - | `./cache` | 播放缓存和封面缓存目录；Windows 服务端可在托盘菜单中设置 |
+| `MUSIC_PATH` | - | `./music` | 下载曲库目录；Windows 服务端可在托盘菜单中设置 |
 
 Web 入口从 v1.5.0 起固定：播放器使用 `/`，管理后台使用 `/admin`。不再提供 `ADMIN_PATH` 与 `PLAYER_PATH` 环境变量，旧 `/music` 网页路径返回 404。下载曲库 `/server/music` 是文件系统持久化目录，与网页入口无关。
+
+`CACHE_PATH` 与 `MUSIC_PATH` 只改变文件存储位置，不改变账户隔离结构；系统会继续在目录下使用 `<用户名>` 子目录。Docker 部署时建议直接映射 `/server/cache` 和 `/server/music`，Windows 服务端则使用托盘菜单设置并在重启后生效。
 
 ## 账户与访问控制
 

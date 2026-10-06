@@ -71,6 +71,92 @@ function saveStoredPath(newPath) {
     updateAppConfig({ storagePath: newPath })
 }
 
+function getConfiguredDirectory(configKey, fallback) {
+    const value = getAppConfig()[configKey]
+    return value ? path.resolve(value) : fallback
+}
+
+function getCachePath() {
+    return getConfiguredDirectory('cachePath', path.join(process.cwd(), 'cache'))
+}
+
+function getMusicPath() {
+    return getConfiguredDirectory('musicPath', path.join(process.cwd(), 'music'))
+}
+
+function configureServerDirectories() {
+    process.env.CACHE_PATH = getCachePath()
+    process.env.MUSIC_PATH = getMusicPath()
+}
+
+function isPathInside(parent, candidate) {
+    const relative = path.relative(path.resolve(parent), path.resolve(candidate))
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function moveDirectoryContents(source, target) {
+    if (!fs.existsSync(source)) return
+    fs.mkdirSync(target, { recursive: true })
+    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+        const sourcePath = path.join(source, entry.name)
+        const targetPath = path.join(target, entry.name)
+        fs.cpSync(sourcePath, targetPath, { recursive: true, force: true })
+    }
+    fs.rmSync(source, { recursive: true, force: true })
+}
+
+function changeServerDirectory(configKey, label, currentPath, otherPath) {
+    const result = dialog.showOpenDialogSync({
+        title: `选择${label}`,
+        defaultPath: currentPath,
+        properties: ['openDirectory', 'createDirectory'],
+    })
+    if (!result || !result[0]) return
+
+    const newPath = path.resolve(result[0])
+    if (newPath === path.resolve(currentPath)) return
+    if (newPath === path.resolve(otherPath) || isPathInside(currentPath, newPath) || isPathInside(newPath, currentPath)) {
+        dialog.showMessageBoxSync({
+            type: 'warning',
+            title: `${label}不可用`,
+            message: `${label}不能与其他目录相同，也不能互相嵌套。`,
+            buttons: ['确定'],
+        })
+        return
+    }
+
+    const choice = dialog.showMessageBoxSync({
+        type: 'question',
+        title: `更改${label}`,
+        message: `是否将当前目录中的已有文件迁移到新目录？`,
+        detail: `当前：${currentPath}\n新目录：${newPath}`,
+        buttons: ['迁移已有文件', '仅切换目录', '取消'],
+        defaultId: 0,
+        cancelId: 2,
+    })
+    if (choice === 2) return
+
+    try {
+        if (choice === 0) moveDirectoryContents(currentPath, newPath)
+        updateAppConfig({ [configKey]: newPath })
+        dialog.showMessageBoxSync({
+            type: 'info',
+            title: `${label}已更新`,
+            message: `${label}将在重启服务端后生效。`,
+            buttons: ['立即重启'],
+        })
+        app.relaunch()
+        app.exit()
+    } catch (error) {
+        dialog.showMessageBoxSync({
+            type: 'error',
+            title: `${label}迁移失败`,
+            message: error?.message || String(error),
+            buttons: ['确定'],
+        })
+    }
+}
+
 if (getAppConfig().disableAcceleration) {
     app.disableHardwareAcceleration()
 }
@@ -117,8 +203,9 @@ async function startServer() {
     process.env.DATA_PATH = dataDir
     process.env.LOG_PATH = logsDir
     process.env.CONFIG_PATH = path.join(storageRoot, 'config.js')
+    configureServerDirectories()
 
-        ;[dataDir, logsDir].forEach(d => { try { fs.mkdirSync(d, { recursive: true }) } catch (_) { } })
+        ;[dataDir, logsDir, getCachePath(), getMusicPath()].forEach(d => { try { fs.mkdirSync(d, { recursive: true }) } catch (_) { } })
 
     const getAvailablePort = (startPort) => {
         return new Promise((resolve) => {
@@ -414,6 +501,14 @@ function createTray() {
                             app.exit()
                         }
                     }
+                },
+                {
+                    label: '更换缓存目录...',
+                    click: () => changeServerDirectory('cachePath', '缓存目录', getCachePath(), getMusicPath()),
+                },
+                {
+                    label: '更换下载目录...',
+                    click: () => changeServerDirectory('musicPath', '下载目录', getMusicPath(), getCachePath()),
                 },
                 { type: 'separator' },
                 { label: '打开当前存储路径', click: () => shell.openPath(storageRoot) },
