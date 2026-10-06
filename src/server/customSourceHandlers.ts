@@ -466,6 +466,7 @@ export async function handleUpdate(req: IncomingMessage, res: ServerResponse, us
         const oldContent = fs.existsSync(scriptPath) ? fs.readFileSync(scriptPath, 'utf-8') : ''
         const oldSources = JSON.stringify(sources)
         if (remote.content === oldContent && String(remote.metadata.version || source.version) === String(source.version)) {
+            clearApiUpdateAlert(owner, source.id)
             sendJson(res, 200, { success: true, updated: false, version: source.version })
             return
         }
