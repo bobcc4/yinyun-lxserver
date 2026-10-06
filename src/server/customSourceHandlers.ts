@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
-import { extractMetadata, loadUserApi, initUserApis, getApiStatus } from './userApi'
+import { extractMetadata, loadUserApi, initUserApis, getApiStatus, clearApiUpdateAlert } from './userApi'
 import { normalizeUsername } from '@/utils/username'
 import { getUserSourcePath } from '@/user'
 import {
@@ -438,7 +438,8 @@ export async function handleCheckUpdate(req: IncomingMessage, res: ServerRespons
             sendJson(res, 200, { success: true, available: true, updateAlert, remoteMetadata: remoteMeta, status: status?.status })
             return
         }
-        sendJson(res, 200, { success: true, available: false, status: status?.status })
+        clearApiUpdateAlert(owner, source.id)
+        sendJson(res, 200, { success: true, available: false, status: getApiStatus(owner, source.id)?.status })
     } catch (error: any) {
         sendJson(res, 400, { success: false, error: error.message })
     }
@@ -492,6 +493,7 @@ export async function handleUpdate(req: IncomingMessage, res: ServerResponse, us
             sources[sourceIndex] = updatedSource
             writeSources(owner, sources)
             await initUserApis(owner)
+            clearApiUpdateAlert(owner, source.id)
         } catch (error) {
             if (oldContent) fs.writeFileSync(scriptPath, oldContent, 'utf-8')
             else if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath)

@@ -178,6 +178,18 @@ export function getApiStatus(owner: string, id: string) {
     return normalizedOwner ? apiStatus.get(`${normalizedOwner}_${id}`) : undefined
 }
 
+export function clearApiUpdateAlert(owner: string, id: string) {
+    const normalizedOwner = tryNormalizeUsername(owner)
+    if (!normalizedOwner) return
+
+    const key = `${normalizedOwner}_${id}`
+    const status = apiStatus.get(key)
+    if (!status?.updateAlert) return
+
+    delete status.updateAlert
+    apiStatus.set(key, status)
+}
+
 
 // 从脚本注释中提取元数据
 export function extractMetadata(script: string): Partial<UserApiInfo> {
