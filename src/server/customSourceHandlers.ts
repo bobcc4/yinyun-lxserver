@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { extractMetadata, loadUserApi, initUserApis, getApiStatus, clearApiUpdateAlert } from './userApi'
+import { isCustomSourceUpdateAvailable } from './customSourceUpdate'
 import { normalizeUsername } from '@/utils/username'
 import { getUserSourcePath } from '@/user'
 import {
@@ -427,7 +428,7 @@ export async function handleCheckUpdate(req: IncomingMessage, res: ServerRespons
         const remoteMeta = extractMetadata(content)
         const currentScriptPath = path.join(getSourceDir(owner), source.id)
         const currentContent = fs.existsSync(currentScriptPath) ? fs.readFileSync(currentScriptPath, 'utf-8') : ''
-        const available = content !== currentContent || (remoteMeta.version !== undefined && String(remoteMeta.version) !== String(source.version))
+        const available = isCustomSourceUpdateAvailable(currentContent, content, source.version, remoteMeta.version)
         const status = getApiStatus(owner, source.id)
         if (available) {
             const updateAlert = {
@@ -465,7 +466,7 @@ export async function handleUpdate(req: IncomingMessage, res: ServerResponse, us
         const scriptPath = path.join(sourceDir, source.id)
         const oldContent = fs.existsSync(scriptPath) ? fs.readFileSync(scriptPath, 'utf-8') : ''
         const oldSources = JSON.stringify(sources)
-        if (remote.content === oldContent && String(remote.metadata.version || source.version) === String(source.version)) {
+        if (!isCustomSourceUpdateAvailable(oldContent, remote.content, source.version, remote.metadata.version)) {
             clearApiUpdateAlert(owner, source.id)
             sendJson(res, 200, { success: true, updated: false, version: source.version })
             return
