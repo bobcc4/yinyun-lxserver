@@ -120,11 +120,14 @@ Docker 容器中的 `127.0.0.1` 不等于 NAS 主机。代理位于主机时使�
 
 ```yaml
 environment:
-  NODE_ENV: production
-  FRONTEND_PASSWORD: "replace-admin-password"
-  SUBSONIC_ENABLE: "true"
-  PROXY_ALL_ENABLED: "false"
+  - NODE_ENV=production
+  - CONFIG_PATH=/server/data/config.js
+  - FRONTEND_PASSWORD=replace-admin-password
+  - SUBSONIC_ENABLE=true
+  - PROXY_ALL_ENABLED=false
 ```
+
+将以上内容放在对应服务的 `environment` 下，并保持缩进一致。列表写法为 `- KEY=value`，不要写成 `- KEY: value`，也不要与不带 `-` 的映射写法混用。
 
 修改环境变量后需要重建容器：
 

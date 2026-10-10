@@ -75,9 +75,11 @@ services:
       # External music library; configure the library name in the admin console first
       # - /volume1/media/music:/server/external/admin/bendigequ:ro
     environment:
-      NODE_ENV: production
-      CONFIG_PATH: /server/data/config.js
+      - NODE_ENV=production
+      - CONFIG_PATH=/server/data/config.js
 ```
+
+Use the `- KEY=value` list syntax consistently under `environment`. Keep the same indentation when adding variables; do not mix it with `KEY: value` mapping syntax.
 
 ### External music libraries
 

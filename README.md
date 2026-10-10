@@ -185,9 +185,11 @@ services:
       # 外部音乐库（先在后台配置库名称；推荐只读挂载）
       # - /volume1/media/music:/server/external/admin/bendigequ:ro
     environment:
-      NODE_ENV: production
-      CONFIG_PATH: /server/data/config.js
+      - NODE_ENV=production
+      - CONFIG_PATH=/server/data/config.js
 ```
+
+`environment` 统一使用 `- KEY=value` 列表写法。追加变量时请保持相同缩进，不要与 `KEY: value` 写法混用。
 
 ### 外部音乐库
 

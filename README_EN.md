@@ -159,9 +159,11 @@ services:
       - ./cache:/server/cache
       - ./music:/server/music
     environment:
-      NODE_ENV: production
-      CONFIG_PATH: /server/data/config.js
+      - NODE_ENV=production
+      - CONFIG_PATH=/server/data/config.js
 ```
+
+Use the `- KEY=value` list syntax consistently under `environment`. Keep the same indentation when adding variables; do not mix it with `KEY: value` mapping syntax.
 
 Start the service:
 
