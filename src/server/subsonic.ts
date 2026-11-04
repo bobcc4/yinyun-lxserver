@@ -290,6 +290,9 @@ class SubsonicHandler {
                 case 'getPlaylist':
                     return this.handleGetPlaylist(res, username, params, format)
 
+                case 'createPlaylist':
+                    return this.handleCreatePlaylist(res, username, params, format)
+
                 case 'getAlbum':
                     return this.handleGetAlbum(res, username, params, format)
 
@@ -1284,6 +1287,69 @@ class SubsonicHandler {
         } catch (err: any) {
             console.error('[Subsonic] updatePlaylist error:', err)
             return this.sendError(res, 0, err.message || 'Failed to update playlist', format)
+        }
+    }
+
+    private async handleCreatePlaylist(res: http.ServerResponse, username: string, params: URLSearchParams, format: string) {
+        const playlistId = params.get('playlistId')
+        const playlistName = (params.get('playlistName') || params.get('name') || '').trim()
+        const songIds = Array.from(new Set(params.getAll('songId').filter(Boolean)))
+
+        if (!playlistId && !playlistName) {
+            return this.sendError(res, 10, 'Required parameter is missing: playlistName', format)
+        }
+        if (playlistName.length > 100) {
+            return this.sendError(res, 0, 'Playlist name must not exceed 100 characters', format)
+        }
+
+        try {
+            const userSpace = getUserSpace(username)
+            const listData = await userSpace.listManage.getListData()
+            if (playlistId) {
+                if (['default', 'love', 'local_music'].includes(playlistId)) {
+                    return this.sendError(res, 50, 'Playlist is read-only: ' + playlistId, format)
+                }
+                const existingPlaylist = listData.userList.find(list => list.id === playlistId)
+                if (!existingPlaylist) {
+                    return this.sendError(res, 70, 'Playlist not found: ' + playlistId, format)
+                }
+            }
+
+            const musics: LX.Music.MusicInfo[] = []
+            for (const songId of songIds) {
+                const found = await this.findMusicById(username, songId)
+                if (!found) return this.sendError(res, 70, 'Song not found: ' + songId, format)
+                const syncableMusic = this.toSyncedPlaylistMusic(found.music)
+                if (!syncableMusic) return this.sendError(res, 70, 'Song is not mapped to the online library: ' + songId, format)
+                musics.push(syncableMusic)
+            }
+
+            let targetPlaylistId = playlistId
+            if (targetPlaylistId && playlistName) {
+                const existingPlaylist = listData.userList.find(list => list.id === targetPlaylistId)!
+                await userSpace.listManage.listDataManage.userListsUpdate([{
+                    ...existingPlaylist,
+                    name: playlistName,
+                    locationUpdateTime: Date.now(),
+                }])
+            } else if (!targetPlaylistId) {
+                targetPlaylistId = `subsonic_${crypto.randomBytes(12).toString('hex')}`
+                await userSpace.listManage.listDataManage.userListCreate({
+                    id: targetPlaylistId,
+                    name: playlistName,
+                    position: -1,
+                    locationUpdateTime: Date.now(),
+                })
+            }
+
+            if (musics.length > 0) {
+                await userSpace.listManage.listDataManage.listMusicAdd(targetPlaylistId!, musics, 'bottom')
+            }
+            await userSpace.listManage.createSnapshot()
+            return this.sendResponse(res, {}, format)
+        } catch (err: any) {
+            console.error('[Subsonic] createPlaylist error:', err)
+            return this.sendError(res, 0, err.message || 'Failed to create playlist', format)
         }
     }
 

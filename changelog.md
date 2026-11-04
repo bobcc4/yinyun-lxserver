@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.9.1 (2026-11-04)
+
+### Subsonic 歌单创建修复
+
+- 实现 Subsonic `createPlaylist`，修复箭头音乐等客户端无法创建歌单并同步到服务端的问题。
+- 支持 `playlistName` / `name`、通过 `playlistId` 重命名已有用户歌单，以及创建或追加时携带多个 `songId`。
+- 创建和修改后保存账户快照；默认列表、收藏和本地音乐等系统列表保持只读。
+
+### 升级说明
+
+- Docker 使用 `bobcc4/yinyun-lxserver:latest`，固定版本标签为 `bobcc4/yinyun-lxserver:v1.9.1`。
+
 ## v1.9.0 (2026-10-22)
 
 ### 安全更新
