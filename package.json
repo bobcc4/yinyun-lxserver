@@ -53,7 +53,7 @@
     "socks-proxy-agent": "^10.1.0",
     "tunnel": "^0.0.6",
     "unzipper": "^0.12.5",
-    "vm2": "^3.11.6",
+    "vm2": "^3.12.2",
     "webdav": "^5.9.0"
   },
   "devDependencies": {
