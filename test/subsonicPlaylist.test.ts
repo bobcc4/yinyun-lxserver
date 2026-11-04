@@ -68,11 +68,11 @@ test('Subsonic createPlaylist creates a user playlist from POST form parameters'
   assert.equal((await protectedRename.json() as any)['subsonic-response'].error.code, 50)
 
   const playlistId = listData.userList[0].id
-  const deleteResponse = await fetch(`${origin}/rest/deletePlaylist.view?u=admin&p=password&playlistId=${playlistId}&f=json`)
+  const deleteResponse = await fetch(`${origin}/rest/deletePlaylist.view?u=admin&p=password&id=${playlistId}&f=json`)
   assert.equal((await deleteResponse.json() as any)['subsonic-response'].status, 'ok')
   assert.equal((await getUserSpace('admin').listManage.getListData()).userList.length, 0)
 
-  const protectedDelete = await fetch(`${origin}/rest/deletePlaylist.view?u=admin&p=password&playlistId=love&f=json`)
+  const protectedDelete = await fetch(`${origin}/rest/deletePlaylist.view?u=admin&p=password&id=love&f=json`)
   assert.equal((await protectedDelete.json() as any)['subsonic-response'].error.code, 50)
 
   const missingName = await fetch(`${origin}/rest/createPlaylist.view?u=admin&p=password&f=json`, { method: 'POST' })

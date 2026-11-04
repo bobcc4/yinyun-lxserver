@@ -1312,7 +1312,7 @@ class SubsonicHandler {
     }
 
     private async handleDeletePlaylist(res: http.ServerResponse, username: string, params: URLSearchParams, format: string) {
-        const playlistId = params.get('playlistId')
+        const playlistId = params.get('playlistId') || params.get('id')
         if (!playlistId) return this.sendError(res, 10, 'Required parameter is missing: playlistId', format)
         if (['default', 'love', 'local_music'].includes(playlistId)) {
             return this.sendError(res, 50, 'Playlist is read-only: ' + playlistId, format)

@@ -7,7 +7,7 @@
 - 实现 Subsonic `createPlaylist`，修复箭头音乐等客户端无法创建歌单并同步到服务端的问题。
 - 支持 `playlistName` / `name`、通过 `playlistId` 重命名已有用户歌单，以及创建或追加时携带多个 `songId`。
 - 修复 Subsonic `updatePlaylist` 忽略歌单名称的问题，支持重命名并保存账户快照。
-- 实现 `deletePlaylist`，允许删除当前账户的普通歌单；默认列表、收藏和本地音乐等系统列表保持只读。
+- 实现 `deletePlaylist`，兼容箭头音乐使用的 `id` 以及标准 `playlistId` 参数，允许删除当前账户的普通歌单；默认列表、收藏和本地音乐等系统列表保持只读。
 - 创建、修改和删除歌单后均保存账户快照。
 
 ### 升级说明
