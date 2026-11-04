@@ -382,6 +382,9 @@ class SubsonicHandler {
                 case 'updatePlaylist':
                     return this.handleUpdatePlaylist(res, username, params, format)
 
+                case 'deletePlaylist':
+                    return this.handleDeletePlaylist(res, username, params, format)
+
                 case 'scrobble':
                     return this.sendResponse(res, {}, format)
 
@@ -1238,14 +1241,23 @@ class SubsonicHandler {
 
     private async handleUpdatePlaylist(res: http.ServerResponse, username: string, params: URLSearchParams, format: string) {
         const playlistId = params.get('playlistId')
+        const playlistName = params.has('name') ? params.get('name')!.trim() : params.get('playlistName')?.trim()
 
         if (!playlistId) return this.sendError(res, 10, 'Required parameter is missing: playlistId', format)
+        if (playlistName !== undefined && (!playlistName || playlistName.length > 100)) {
+            return this.sendError(res, 0, 'Playlist name must not be empty or exceed 100 characters', format)
+        }
 
         try {
             const userSpace = getUserSpace(username)
             const listData = await userSpace.listManage.getListData()
-            const playlistExists = playlistId === 'default' || playlistId === 'love' || listData.userList.some(list => list.id === playlistId)
-            if (!playlistExists) return this.sendError(res, 70, 'Playlist not found: ' + playlistId, format)
+            const existingPlaylist = listData.userList.find(list => list.id === playlistId)
+            if (!existingPlaylist) {
+                if (['default', 'love', 'local_music'].includes(playlistId)) {
+                    return this.sendError(res, 50, 'Playlist is read-only: ' + playlistId, format)
+                }
+                return this.sendError(res, 70, 'Playlist not found: ' + playlistId, format)
+            }
 
             const currentMusics = await userSpace.listManage.listDataManage.getListMusics(playlistId)
             const indexesToRemove = params.getAll('songIndexToRemove').map(value => Number(value))
@@ -1273,20 +1285,51 @@ class SubsonicHandler {
                 musicsToAdd.push(syncableMusic)
             }
 
+            let changed = false
+            if (playlistName !== undefined && playlistName !== existingPlaylist.name) {
+                await userSpace.listManage.listDataManage.userListsUpdate([{
+                    ...existingPlaylist,
+                    name: playlistName,
+                    locationUpdateTime: Date.now(),
+                }])
+                changed = true
+            }
             if (songIdsToRemove.size > 0) {
                 await userSpace.listManage.listDataManage.listMusicRemove(playlistId, Array.from(songIdsToRemove))
+                changed = true
             }
             if (musicsToAdd.length > 0) {
                 await userSpace.listManage.listDataManage.listMusicAdd(playlistId, musicsToAdd, 'bottom')
+                changed = true
             }
-            if (songIdsToRemove.size > 0 || musicsToAdd.length > 0) {
-                await userSpace.listManage.createSnapshot()
-            }
+            if (changed) await userSpace.listManage.createSnapshot()
 
             return this.sendResponse(res, {}, format)
         } catch (err: any) {
             console.error('[Subsonic] updatePlaylist error:', err)
             return this.sendError(res, 0, err.message || 'Failed to update playlist', format)
+        }
+    }
+
+    private async handleDeletePlaylist(res: http.ServerResponse, username: string, params: URLSearchParams, format: string) {
+        const playlistId = params.get('playlistId')
+        if (!playlistId) return this.sendError(res, 10, 'Required parameter is missing: playlistId', format)
+        if (['default', 'love', 'local_music'].includes(playlistId)) {
+            return this.sendError(res, 50, 'Playlist is read-only: ' + playlistId, format)
+        }
+
+        try {
+            const userSpace = getUserSpace(username)
+            const listData = await userSpace.listManage.getListData()
+            if (!listData.userList.some(list => list.id === playlistId)) {
+                return this.sendError(res, 70, 'Playlist not found: ' + playlistId, format)
+            }
+            await userSpace.listManage.listDataManage.userListsRemove([playlistId])
+            await userSpace.listManage.createSnapshot()
+            return this.sendResponse(res, {}, format)
+        } catch (err: any) {
+            console.error('[Subsonic] deletePlaylist error:', err)
+            return this.sendError(res, 0, err.message || 'Failed to delete playlist', format)
         }
     }
 
